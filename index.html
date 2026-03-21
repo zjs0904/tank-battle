@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>坦克大战</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <aside class="panel">
+        <div>
+          <p class="eyebrow">GitHub Pages Ready</p>
+          <h1>坦克大战</h1>
+          <p class="intro">
+            一个可以直接上传到 GitHub 并发布的网页版坦克大战。页面是纯静态文件，不需要服务器构建。
+          </p>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-card">
+            <span>分数</span>
+            <strong id="score">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>生命</span>
+            <strong id="lives">3</strong>
+          </div>
+          <div class="stat-card">
+            <span>关卡</span>
+            <strong id="level">1</strong>
+          </div>
+          <div class="stat-card">
+            <span>敌军</span>
+            <strong id="enemies">0</strong>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button id="startButton" class="primary-button">开始 / 重新开始</button>
+          <p>操作说明</p>
+          <ul>
+            <li><span>W A S D</span> 控制移动</li>
+            <li><span>J</span> 发射炮弹</li>
+            <li><span>K</span> 使用护盾技能</li>
+            <li><span>P</span> 暂停 / 继续</li>
+          </ul>
+        </div>
+
+        <div class="tips">
+          <p>目标</p>
+          <p>摧毁所有敌方坦克并保护基地，敌人会随着关卡提升变快、变准。</p>
+        </div>
+      </aside>
+
+      <main class="game-stage">
+        <div class="canvas-frame">
+          <canvas id="gameCanvas" width="900" height="600"></canvas>
+          <div id="overlay" class="overlay">
+            <div class="overlay-card">
+              <h2 id="overlayTitle">按下开始按钮</h2>
+              <p id="overlayText">准备好后进入战场。</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="./game.js"></script>
+  </body>
+</html>
