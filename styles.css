@@ -104,7 +104,8 @@ h1 {
 }
 
 .mode-button,
-.primary-button {
+.primary-button,
+.touch-button {
   border: 0;
   cursor: pointer;
   font-size: 15px;
@@ -309,6 +310,84 @@ canvas {
   line-height: 1.6;
 }
 
+.mobile-controls {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  z-index: 3;
+  display: none;
+  justify-content: space-between;
+  align-items: end;
+  gap: 18px;
+}
+
+.mobile-controls.hidden {
+  display: none;
+}
+
+.mobile-pad {
+  position: relative;
+  width: 180px;
+  height: 180px;
+}
+
+.mobile-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.touch-button {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  color: var(--text);
+  background: rgba(7, 18, 28, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
+  touch-action: none;
+  user-select: none;
+}
+
+.touch-button:active,
+.touch-button.is-pressed {
+  transform: scale(0.96);
+  background: rgba(255, 157, 66, 0.9);
+  color: #16120c;
+}
+
+.touch-up {
+  top: 0;
+  left: 62px;
+}
+
+.touch-left {
+  top: 62px;
+  left: 0;
+}
+
+.touch-right {
+  top: 62px;
+  right: 0;
+}
+
+.touch-down {
+  bottom: 0;
+  left: 62px;
+}
+
+.touch-fire {
+  position: static;
+  width: 96px;
+  height: 96px;
+  border-radius: 999px;
+  font-size: 18px;
+  background: linear-gradient(135deg, rgba(255, 205, 87, 0.92), rgba(255, 143, 61, 0.92));
+  color: #17130d;
+}
+
 @media (max-width: 1180px) {
   .page-shell {
     grid-template-columns: 1fr;
@@ -342,6 +421,10 @@ canvas {
     pointer-events: auto;
     gap: 10px;
     flex-wrap: wrap;
+  }
+
+  .mobile-controls {
+    display: flex;
   }
 
   h1 {

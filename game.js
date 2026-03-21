@@ -8,6 +8,7 @@ const startButton = document.getElementById("startButton");
 const singleModeButton = document.getElementById("singleModeButton");
 const versusModeButton = document.getElementById("versusModeButton");
 const modeBadge = document.getElementById("modeBadge");
+const mobileControls = document.getElementById("mobileControls");
 
 const statEls = {
   score: document.getElementById("score"),
@@ -115,7 +116,7 @@ function createPlayer(config, mode) {
     accent: config.accent,
     x: spawn.x,
     y: spawn.y,
-    speed: 320,
+    speed: mode === "single" ? 390 : 320,
     hp: 1
   });
 }
@@ -165,9 +166,7 @@ function createInitialState(mode) {
     itemTimer: 4.5
   };
 
-  if (mode === "single") {
-    spawnEnemyWave(state);
-  }
+  if (mode === "single") spawnEnemyWave(state);
   return state;
 }
 
@@ -191,11 +190,16 @@ function spawnEnemyWave(state) {
   });
 }
 
+function updateMobileControlsVisibility() {
+  mobileControls.classList.toggle("hidden", selectedMode !== "single");
+}
+
 function setMode(mode) {
   selectedMode = mode;
   singleModeButton.classList.toggle("active", mode === "single");
   versusModeButton.classList.toggle("active", mode === "versus");
   modeBadge.textContent = mode === "versus" ? "双人对战" : "单人闯关";
+  updateMobileControlsVisibility();
   setOverlay(
     mode === "versus" ? "双人对战已就绪" : "单人闯关已就绪",
     mode === "versus" ? "1P 和 2P 互相对轰，抢到强道具就能起节奏。" : "躲弹、抢道具、清敌军、守基地。",
@@ -213,7 +217,8 @@ function resetGame() {
   gameState = createInitialState(selectedMode);
   gameState.status = "running";
   modeBadge.textContent = selectedMode === "versus" ? "双人对战" : "单人闯关";
-  setOverlay("战斗开始", "道具加成已经拉高了，左侧可以直接看持续时间。", false);
+  updateMobileControlsVisibility();
+  setOverlay("战斗开始", "移动端单人模式可以直接用屏幕按钮操作。", false);
   syncStats();
 }
 
@@ -278,16 +283,13 @@ function hitsObstacle(tank, state) {
   }
 
   const baseBounds = getBaseBounds(state);
-  if (tank.type === "enemy" && baseBounds && rectsOverlap(bounds, baseBounds)) {
-    return true;
-  }
+  if (tank.type === "enemy" && baseBounds && rectsOverlap(bounds, baseBounds)) return true;
 
   const allTanks = [...state.players, ...state.enemies];
   for (const other of allTanks) {
     if (other === tank || !other.alive || other.hp <= 0) continue;
     if (rectsOverlap(bounds, other.bounds)) return true;
   }
-
   return false;
 }
 
@@ -307,10 +309,8 @@ function moveTank(tank, dt, state, intentX, intentY) {
 
   const originalX = tank.x;
   const originalY = tank.y;
-
   tank.x = clamp(tank.x + velocityX, tank.width / 2, WORLD.width - tank.width / 2);
   if (hitsObstacle(tank, state)) tank.x = originalX;
-
   tank.y = clamp(tank.y + velocityY, tank.height / 2, WORLD.height - tank.height / 2);
   if (hitsObstacle(tank, state)) tank.y = originalY;
 }
@@ -330,7 +330,7 @@ function fireLaser(tank, state) {
     if (sameRow || sameCol) {
       target.hp -= 3;
       state.explosions.push({ x: target.x, y: target.y, life: 0.24, size: 32, color: "255,105,105" });
-      if (target.hp <= 0) handleTankDestroyed(target, state, tank.id);
+      if (target.hp <= 0) handleTankDestroyed(target, state);
     }
   }
 
@@ -338,9 +338,7 @@ function fireLaser(tank, state) {
     if (wall.hp <= 0) continue;
     const sameRow = dir.x !== 0 && Math.abs(wall.y - tank.y) < wall.h / 2 + 10 && Math.sign(wall.x - tank.x) === dir.x;
     const sameCol = dir.y !== 0 && Math.abs(wall.x - tank.x) < wall.w / 2 + 10 && Math.sign(wall.y - tank.y) === dir.y;
-    if (sameRow || sameCol) {
-      wall.hp -= 3;
-    }
+    if (sameRow || sameCol) wall.hp -= 3;
   }
 
   state.explosions.push({ x: tank.x + dir.x * 130, y: tank.y + dir.y * 130, life: 0.16, size: 110, color: "255,105,105" });
@@ -358,7 +356,7 @@ function shoot(tank, state) {
   const dir = DIRECTIONS[tank.direction];
   const isEnemy = tank.type === "enemy";
   const rapidFactor = tank.power === "rapid" ? 0.25 : 1;
-  const bulletSpeed = isEnemy ? 460 + state.round * 18 : 920;
+  const bulletSpeed = isEnemy ? 460 + state.round * 18 : state.mode === "single" ? 1120 : 920;
 
   state.bullets.push({
     x: tank.x + dir.x * 28,
@@ -411,7 +409,6 @@ function updateEnemies(dt, state) {
 
   for (const enemy of state.enemies) {
     if (!enemy.alive || enemy.hp <= 0) continue;
-
     enemy.aiTimer -= dt;
     enemy.fireTimer -= dt;
     const target = getNearestPlayer(enemy, state);
@@ -419,9 +416,7 @@ function updateEnemies(dt, state) {
     if (enemy.aiTimer <= 0) {
       const dx = target ? target.x - enemy.x : 0;
       const dy = target ? target.y - enemy.y : 1;
-      enemy.direction = Math.abs(dx) > Math.abs(dy)
-        ? dx > 0 ? "right" : "left"
-        : dy > 0 ? "down" : "up";
+      enemy.direction = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
       enemy.aiTimer = randomBetween(0.15, 0.45);
     }
 
@@ -486,7 +481,7 @@ function collideBulletWithTanks(bullet, state) {
 
     tank.hp -= 1;
     state.explosions.push({ x: bullet.x, y: bullet.y, life: 0.2, size: 24, color: tank.type === "enemy" ? "255,141,99" : tank.accent });
-    if (tank.hp <= 0) handleTankDestroyed(tank, state, bullet.owner);
+    if (tank.hp <= 0) handleTankDestroyed(tank, state);
     return true;
   }
   return false;
@@ -562,7 +557,6 @@ function handleTankDestroyed(tank, state) {
   }
 
   state.lives[tank.id] = Math.max(0, state.lives[tank.id] - 1);
-
   if (state.mode === "versus") {
     const winnerId = tank.id === "player1" ? "player2" : "player1";
     state.wins[winnerId] += 1;
@@ -644,7 +638,6 @@ function update(dt) {
 
 function drawTank(tank) {
   if (!tank.alive || tank.hp <= 0) return;
-
   ctx.save();
   ctx.translate(tank.x, tank.y);
   ctx.rotate(DIRECTIONS[tank.direction].angle);
@@ -655,7 +648,6 @@ function drawTank(tank) {
   ctx.fillStyle = "#18242b";
   ctx.fillRect(-9, -9, 18, 18);
   ctx.fillRect(0, -4, tank.width / 2 + 12, 8);
-
   if (tank.type === "player") {
     ctx.fillStyle = "rgba(6, 15, 22, 0.58)";
     ctx.fillRect(-12, 16, 24, 12);
@@ -738,12 +730,12 @@ function drawHud(state) {
   ctx.fillStyle = "#edf4ef";
   ctx.font = "14px Segoe UI";
   ctx.fillText(
-    state.mode === "versus" ? `比分: ${state.wins.player1}:${state.wins.player2}` : `基地耐久: ${state.base.hp}/${state.base.maxHp}`,
+    gameState.mode === "versus" ? `比分: ${state.wins.player1}:${state.wins.player2}` : `基地耐久: ${state.base.hp}/${state.base.maxHp}`,
     WORLD.width - 206,
     44
   );
   ctx.fillText(
-    state.mode === "versus" ? `回合: ${state.round}` : `敌军剩余: ${state.enemies.length}`,
+    gameState.mode === "versus" ? `回合: ${state.round}` : `敌军剩余: ${state.enemies.length}`,
     WORLD.width - 206,
     68
   );
@@ -761,6 +753,30 @@ function render() {
   drawBullets(gameState);
   drawExplosions(gameState);
   drawHud(gameState);
+}
+
+function bindTouchControls() {
+  const touchButtons = document.querySelectorAll("[data-touch-key]");
+
+  const press = (button) => {
+    keys.add(button.dataset.touchKey);
+    button.classList.add("is-pressed");
+  };
+
+  const release = (button) => {
+    keys.delete(button.dataset.touchKey);
+    button.classList.remove("is-pressed");
+  };
+
+  for (const button of touchButtons) {
+    button.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      press(button);
+    });
+    button.addEventListener("pointerup", () => release(button));
+    button.addEventListener("pointercancel", () => release(button));
+    button.addEventListener("pointerleave", () => release(button));
+  }
 }
 
 function loop(timestamp) {
@@ -791,6 +807,7 @@ singleModeButton.addEventListener("click", () => setMode("single"));
 versusModeButton.addEventListener("click", () => setMode("versus"));
 startButton.addEventListener("click", resetGame);
 
+bindTouchControls();
 gameState = createInitialState(selectedMode);
 setMode("single");
 syncStats();

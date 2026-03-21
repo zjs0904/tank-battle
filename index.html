@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>坦克大战</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -12,7 +12,7 @@
         <div class="hero-copy">
           <p class="eyebrow">Arena Upgrade</p>
           <h1>坦克大战</h1>
-          <p class="intro">更快的子弹、更强的道具、真正的双人对战，仍然可以直接发布到 GitHub Pages。</p>
+          <p class="intro">更快的子弹、更强的道具、真正的双人对战，并额外支持单人模式的移动端触控操作。</p>
         </div>
 
         <section class="mode-panel">
@@ -73,6 +73,7 @@
             <ul class="controls-list">
               <li><span>W A S D</span><em>移动</em></li>
               <li><span>J</span><em>开火</em></li>
+              <li><span>触控按钮</span><em>移动端单人</em></li>
             </ul>
           </div>
           <div class="controls-card">
@@ -104,6 +105,17 @@
             <div class="overlay-card">
               <h2 id="overlayTitle">准备开战</h2>
               <p id="overlayText">单人模式打 AI，双人模式是 1P 对 2P。</p>
+            </div>
+          </div>
+          <div id="mobileControls" class="mobile-controls hidden">
+            <div class="mobile-pad">
+              <button class="touch-button touch-up" data-touch-key="KeyW" type="button">↑</button>
+              <button class="touch-button touch-left" data-touch-key="KeyA" type="button">←</button>
+              <button class="touch-button touch-right" data-touch-key="KeyD" type="button">→</button>
+              <button class="touch-button touch-down" data-touch-key="KeyS" type="button">↓</button>
+            </div>
+            <div class="mobile-actions">
+              <button class="touch-button touch-fire" data-touch-key="KeyJ" type="button">发射</button>
             </div>
           </div>
         </div>
