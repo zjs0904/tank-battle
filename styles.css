@@ -1,14 +1,14 @@
 :root {
-  --bg: #101820;
-  --panel: rgba(12, 24, 30, 0.9);
+  --bg-top: #08131c;
+  --bg-bottom: #102536;
+  --panel: rgba(6, 15, 23, 0.86);
   --panel-border: rgba(255, 255, 255, 0.08);
-  --accent: #f2aa4c;
-  --accent-strong: #ff7a18;
-  --text: #f5f1e8;
-  --muted: #9bb0b8;
-  --danger: #ff6b57;
-  --success: #7ddf64;
-  --grid: rgba(255, 255, 255, 0.06);
+  --card: rgba(255, 255, 255, 0.05);
+  --text: #edf4ef;
+  --muted: #95a8b4;
+  --accent: #ffcd57;
+  --accent-strong: #ff8f3d;
+  --grid: rgba(255, 255, 255, 0.05);
 }
 
 * {
@@ -21,52 +21,122 @@ body {
   font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   color: var(--text);
   background:
-    radial-gradient(circle at top, rgba(242, 170, 76, 0.18), transparent 32%),
-    linear-gradient(135deg, #0f1c24 0%, #122b35 48%, #1d3a45 100%);
+    radial-gradient(circle at top left, rgba(86, 196, 255, 0.16), transparent 26%),
+    radial-gradient(circle at bottom right, rgba(255, 143, 61, 0.15), transparent 24%),
+    linear-gradient(135deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
 }
 
 .page-shell {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: 360px minmax(0, 1fr);
   gap: 24px;
-  padding: 24px;
   min-height: 100vh;
+  padding: 22px;
 }
 
 .panel,
 .canvas-frame {
   border: 1px solid var(--panel-border);
   background: var(--panel);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px);
 }
 
 .panel {
-  padding: 24px;
-  border-radius: 24px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 28px;
 }
 
 .eyebrow {
   margin: 0 0 8px;
   color: var(--accent);
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.22em;
   font-size: 12px;
+  text-transform: uppercase;
 }
 
 h1 {
   margin: 0;
-  font-size: 40px;
+  font-size: 42px;
+  line-height: 1.05;
+}
+
+.hero-copy {
+  display: grid;
+  gap: 8px;
 }
 
 .intro,
-.tips p {
+.tips-card p {
   margin: 0;
   color: var(--muted);
-  line-height: 1.6;
+  line-height: 1.7;
+}
+
+.section-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.mode-panel,
+.tips-card,
+.controls-card,
+.stat-card {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--card);
+}
+
+.mode-panel,
+.tips-card {
+  padding: 16px;
+  border-radius: 20px;
+}
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.mode-button,
+.primary-button {
+  border: 0;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.mode-button {
+  padding: 12px 14px;
+  border-radius: 16px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mode-button.active {
+  color: #17130d;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  box-shadow: 0 12px 24px rgba(255, 143, 61, 0.24);
+}
+
+.primary-button {
+  width: 100%;
+  padding: 15px 18px;
+  border-radius: 999px;
+  color: #16120c;
+  background: linear-gradient(135deg, #ffe07c, #ff9d42);
+  box-shadow: 0 14px 28px rgba(255, 169, 71, 0.24);
+}
+
+.mode-button:hover,
+.primary-button:hover {
+  transform: translateY(-2px);
 }
 
 .stat-grid {
@@ -78,29 +148,35 @@ h1 {
 .stat-card {
   padding: 16px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.stat-card-highlight {
+  background: linear-gradient(135deg, rgba(255, 205, 87, 0.2), rgba(255, 143, 61, 0.16));
 }
 
 .stat-card span {
   display: block;
   margin-bottom: 8px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .stat-card strong {
-  font-size: 28px;
+  font-size: 29px;
 }
 
-.controls p,
-.tips p:first-child {
-  margin: 0 0 12px;
-  color: var(--text);
-  font-weight: 700;
+.controls-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.controls ul {
+.controls-card {
+  padding: 16px;
+  border-radius: 20px;
+}
+
+.controls-list {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -108,36 +184,27 @@ h1 {
   gap: 10px;
 }
 
-.controls li {
+.controls-list li {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 14px;
+  gap: 14px;
+  padding: 10px 12px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--muted);
 }
 
-.controls li span {
+.controls-list span {
   color: var(--text);
   font-weight: 700;
 }
 
-.primary-button {
-  border: 0;
-  border-radius: 999px;
-  padding: 14px 20px;
-  font-size: 15px;
-  font-weight: 700;
-  color: #1c1711;
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-  cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
-  box-shadow: 0 12px 24px rgba(242, 170, 76, 0.28);
+.controls-list em {
+  font-style: normal;
 }
 
-.primary-button:hover {
-  transform: translateY(-2px);
+.tips-card strong {
+  color: var(--accent);
 }
 
 .game-stage {
@@ -148,20 +215,61 @@ h1 {
 .canvas-frame {
   position: relative;
   width: 100%;
-  border-radius: 28px;
   padding: 18px;
+  border-radius: 30px;
+  overflow: hidden;
+}
+
+.canvas-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top right, rgba(86, 196, 255, 0.12), transparent 24%),
+    radial-gradient(circle at bottom left, rgba(255, 143, 61, 0.12), transparent 28%);
+  pointer-events: none;
+}
+
+.stage-topbar {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  right: 24px;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+
+.mode-badge,
+.topbar-tip {
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  background: rgba(6, 15, 23, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mode-badge {
+  color: var(--accent);
+}
+
+.topbar-tip {
+  color: var(--muted);
 }
 
 canvas {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 20px;
+  border-radius: 24px;
   background:
     linear-gradient(var(--grid) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid) 1px, transparent 1px),
-    linear-gradient(180deg, #304d30 0%, #223825 100%);
-  background-size: 30px 30px, 30px 30px, auto;
+    linear-gradient(180deg, #355936 0%, #213823 100%);
+  background-size: 32px 32px, 32px 32px, auto;
 }
 
 .overlay {
@@ -170,9 +278,9 @@ canvas {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(8, 12, 14, 0.44);
-  border-radius: 20px;
-  transition: opacity 0.2s ease;
+  background: rgba(6, 12, 16, 0.46);
+  border-radius: 24px;
+  transition: opacity 0.22s ease;
 }
 
 .overlay.hidden {
@@ -181,49 +289,62 @@ canvas {
 }
 
 .overlay-card {
-  padding: 28px 32px;
-  border-radius: 24px;
+  max-width: 440px;
+  padding: 32px;
+  border-radius: 26px;
   text-align: center;
-  background: rgba(7, 16, 20, 0.88);
+  background: rgba(7, 16, 24, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
 }
 
 .overlay-card h2 {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   font-size: 30px;
 }
 
 .overlay-card p {
   margin: 0;
   color: var(--muted);
+  line-height: 1.6;
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1180px) {
   .page-shell {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 760px) {
   .page-shell {
-    padding: 14px;
     gap: 16px;
+    padding: 14px;
   }
 
   .panel,
   .canvas-frame {
-    border-radius: 18px;
+    border-radius: 22px;
   }
 
   .panel {
     padding: 18px;
   }
 
-  h1 {
-    font-size: 32px;
+  .controls-layout,
+  .stat-grid,
+  .mode-switch {
+    grid-template-columns: 1fr;
   }
 
-  .stat-card strong {
-    font-size: 24px;
+  .stage-topbar {
+    position: static;
+    margin-bottom: 12px;
+    pointer-events: auto;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  h1 {
+    font-size: 34px;
   }
 }

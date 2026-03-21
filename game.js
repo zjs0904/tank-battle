@@ -5,19 +5,28 @@ const overlay = document.getElementById("overlay");
 const overlayTitle = document.getElementById("overlayTitle");
 const overlayText = document.getElementById("overlayText");
 const startButton = document.getElementById("startButton");
+const singleModeButton = document.getElementById("singleModeButton");
+const versusModeButton = document.getElementById("versusModeButton");
+const modeBadge = document.getElementById("modeBadge");
 
 const statEls = {
   score: document.getElementById("score"),
-  lives: document.getElementById("lives"),
   level: document.getElementById("level"),
-  enemies: document.getElementById("enemies")
+  enemies: document.getElementById("enemies"),
+  baseHp: document.getElementById("baseHp"),
+  p1Lives: document.getElementById("p1Lives"),
+  p2Lives: document.getElementById("p2Lives"),
+  p1Item: document.getElementById("p1Item"),
+  p1Timer: document.getElementById("p1Timer"),
+  p2Item: document.getElementById("p2Item"),
+  p2Timer: document.getElementById("p2Timer")
 };
 
-const WORLD = {
-  width: canvas.width,
-  height: canvas.height,
-  tile: 30
-};
+const WORLD = { width: canvas.width, height: canvas.height };
+const keys = new Set();
+let selectedMode = "single";
+let gameState = null;
+let lastFrame = 0;
 
 const DIRECTIONS = {
   up: { x: 0, y: -1, angle: -Math.PI / 2 },
@@ -26,26 +35,52 @@ const DIRECTIONS = {
   right: { x: 1, y: 0, angle: 0 }
 };
 
-const keys = new Set();
-let gameState = null;
-let lastFrame = 0;
+const PLAYER_CONFIGS = [
+  {
+    id: "player1",
+    label: "1P",
+    color: "#7ef28d",
+    accent: "116,242,141",
+    spawnSingle: { x: WORLD.width / 2, y: WORLD.height - 92 },
+    spawnVersus: { x: 180, y: WORLD.height / 2 },
+    controls: { up: "KeyW", down: "KeyS", left: "KeyA", right: "KeyD", fire: "KeyJ" }
+  },
+  {
+    id: "player2",
+    label: "2P",
+    color: "#62c7ff",
+    accent: "98,199,255",
+    spawnVersus: { x: WORLD.width - 180, y: WORLD.height / 2 },
+    controls: { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight", fire: "Enter" }
+  }
+];
+
+const ITEM_TYPES = {
+  laser: { label: "激光炮", color: "#ff6666", duration: 9 },
+  rapid: { label: "连发", color: "#ffd84f", duration: 9 },
+  boost: { label: "加速", color: "#59f0c2", duration: 9 }
+};
 
 class Tank {
   constructor(config) {
+    this.id = config.id;
+    this.label = config.label || "";
+    this.type = config.type;
+    this.color = config.color;
+    this.accent = config.accent;
     this.x = config.x;
     this.y = config.y;
-    this.width = config.width || 34;
-    this.height = config.height || 34;
-    this.speed = config.speed;
+    this.width = 34;
+    this.height = 34;
     this.direction = config.direction || "up";
-    this.color = config.color;
-    this.type = config.type;
+    this.speed = config.speed;
+    this.hp = config.hp;
     this.cooldown = 0;
-    this.hp = config.hp || 1;
-    this.maxHp = this.hp;
     this.aiTimer = 0;
-    this.fireTimer = randomBetween(0.8, 1.8);
-    this.shield = 0;
+    this.fireTimer = randomBetween(0.3, 0.7);
+    this.alive = true;
+    this.power = null;
+    this.powerTime = 0;
   }
 
   get bounds() {
@@ -58,75 +93,114 @@ class Tank {
   }
 }
 
-function createInitialState() {
+function randomBetween(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function rectsOverlap(a, b) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function createPlayer(config, mode) {
+  const spawn = mode === "versus" ? config.spawnVersus : config.spawnSingle;
+  return new Tank({
+    id: config.id,
+    label: config.label,
+    type: "player",
+    color: config.color,
+    accent: config.accent,
+    x: spawn.x,
+    y: spawn.y,
+    speed: 320,
+    hp: 1
+  });
+}
+
+function createWalls(mode) {
+  if (mode === "versus") {
+    return [
+      { x: WORLD.width / 2, y: 120, w: 160, h: 30, hp: 4, maxHp: 4 },
+      { x: WORLD.width / 2, y: WORLD.height - 120, w: 160, h: 30, hp: 4, maxHp: 4 },
+      { x: WORLD.width / 2, y: WORLD.height / 2, w: 30, h: 160, hp: 4, maxHp: 4 },
+      { x: 280, y: WORLD.height / 2, w: 30, h: 120, hp: 4, maxHp: 4 },
+      { x: WORLD.width - 280, y: WORLD.height / 2, w: 30, h: 120, hp: 4, maxHp: 4 }
+    ];
+  }
+
+  return [
+    { x: 170, y: 150, w: 132, h: 30, hp: 5, maxHp: 5 },
+    { x: 790, y: 150, w: 132, h: 30, hp: 5, maxHp: 5 },
+    { x: 300, y: 270, w: 30, h: 136, hp: 5, maxHp: 5 },
+    { x: 660, y: 270, w: 30, h: 136, hp: 5, maxHp: 5 },
+    { x: 480, y: 180, w: 180, h: 30, hp: 5, maxHp: 5 },
+    { x: 480, y: 390, w: 220, h: 30, hp: 5, maxHp: 5 },
+    { x: 190, y: 420, w: 140, h: 30, hp: 5, maxHp: 5 },
+    { x: 770, y: 420, w: 140, h: 30, hp: 5, maxHp: 5 }
+  ];
+}
+
+function createInitialState(mode) {
+  const players = mode === "versus"
+    ? PLAYER_CONFIGS.map((config) => createPlayer(config, mode))
+    : [createPlayer(PLAYER_CONFIGS[0], mode)];
+
   const state = {
-    score: 0,
-    level: 1,
-    lives: 3,
+    mode,
     status: "idle",
-    message: "按下开始按钮",
+    score: 0,
+    round: 1,
     bullets: [],
     enemies: [],
     explosions: [],
-    walls: createWalls(),
-    base: { x: WORLD.width / 2, y: WORLD.height - 32, width: 70, height: 26, hp: 5, maxHp: 5 },
-    player: createPlayer(),
-    shieldCharges: 1,
-    shieldCooldown: 0,
-    invulnerableTime: 0
+    items: [],
+    walls: createWalls(mode),
+    base: mode === "single" ? { x: WORLD.width / 2, y: WORLD.height - 32, width: 76, height: 28, hp: 5, maxHp: 5 } : null,
+    players,
+    lives: { player1: 3, player2: mode === "versus" ? 3 : 0 },
+    wins: { player1: 0, player2: 0 },
+    itemTimer: 4.5
   };
 
-  spawnEnemyWave(state);
+  if (mode === "single") {
+    spawnEnemyWave(state);
+  }
   return state;
 }
 
-function createPlayer() {
-  return new Tank({
-    x: WORLD.width / 2,
-    y: WORLD.height - 80,
-    speed: 210,
-    direction: "up",
-    color: "#7ddf64",
-    type: "player",
-    hp: 3
-  });
-}
-
-function createWalls() {
-  const walls = [];
-  const templates = [
-    { x: 180, y: 160, w: 120, h: 30 },
-    { x: 720, y: 160, w: 120, h: 30 },
-    { x: 300, y: 290, w: 30, h: 120 },
-    { x: 600, y: 290, w: 30, h: 120 },
-    { x: 450, y: 180, w: 150, h: 30 },
-    { x: 450, y: 420, w: 180, h: 30 },
-    { x: 180, y: 420, w: 120, h: 30 },
-    { x: 720, y: 420, w: 120, h: 30 }
-  ];
-
-  for (const item of templates) {
-    walls.push({ ...item, hp: 4, maxHp: 4 });
-  }
-  return walls;
-}
-
 function spawnEnemyWave(state) {
-  const count = Math.min(4 + state.level, 10);
-  const spawnPoints = [90, 250, 450, 650, 810];
-
+  const count = Math.min(4 + state.round * 2, 14);
+  const spawnPoints = [80, 220, 360, 480, 600, 740, 880];
   state.enemies = Array.from({ length: count }, (_, index) => {
     const lane = spawnPoints[index % spawnPoints.length];
+    const row = Math.floor(index / spawnPoints.length);
     return new Tank({
-      x: lane,
-      y: 70 + Math.floor(index / spawnPoints.length) * 60,
-      speed: 85 + state.level * 12,
-      direction: "down",
-      color: "#ff6b57",
+      id: `enemy-${state.round}-${index}`,
       type: "enemy",
-      hp: 1 + Math.floor((state.level - 1) / 2)
+      color: "#ff785f",
+      accent: "255,120,95",
+      x: lane,
+      y: 80 + row * 56,
+      speed: 140 + state.round * 16,
+      direction: "down",
+      hp: 1
     });
   });
+}
+
+function setMode(mode) {
+  selectedMode = mode;
+  singleModeButton.classList.toggle("active", mode === "single");
+  versusModeButton.classList.toggle("active", mode === "versus");
+  modeBadge.textContent = mode === "versus" ? "双人对战" : "单人闯关";
+  setOverlay(
+    mode === "versus" ? "双人对战已就绪" : "单人闯关已就绪",
+    mode === "versus" ? "1P 和 2P 互相对轰，抢到强道具就能起节奏。" : "躲弹、抢道具、清敌军、守基地。",
+    true
+  );
 }
 
 function setOverlay(title, text, visible) {
@@ -136,39 +210,94 @@ function setOverlay(title, text, visible) {
 }
 
 function resetGame() {
-  gameState = createInitialState();
+  gameState = createInitialState(selectedMode);
   gameState.status = "running";
-  setOverlay("战斗开始", "摧毁所有敌军并保护基地。", false);
+  modeBadge.textContent = selectedMode === "versus" ? "双人对战" : "单人闯关";
+  setOverlay("战斗开始", "道具加成已经拉高了，左侧可以直接看持续时间。", false);
   syncStats();
 }
 
+function syncPlayerBuff(player, itemEl, timerEl) {
+  if (!player || !player.alive || !player.power || player.powerTime <= 0) {
+    itemEl.textContent = "无";
+    timerEl.textContent = "0s";
+    return;
+  }
+  itemEl.textContent = ITEM_TYPES[player.power].label;
+  timerEl.textContent = `${player.powerTime.toFixed(1)}s`;
+}
+
 function syncStats() {
-  statEls.score.textContent = String(gameState.score);
-  statEls.lives.textContent = String(gameState.lives);
-  statEls.level.textContent = String(gameState.level);
-  statEls.enemies.textContent = String(gameState.enemies.length);
+  if (gameState.mode === "versus") {
+    statEls.score.textContent = `${gameState.wins.player1}:${gameState.wins.player2}`;
+    statEls.level.textContent = String(gameState.round);
+    statEls.enemies.textContent = "对战中";
+    statEls.baseHp.textContent = "-";
+  } else {
+    statEls.score.textContent = String(gameState.score);
+    statEls.level.textContent = String(gameState.round);
+    statEls.enemies.textContent = String(gameState.enemies.length);
+    statEls.baseHp.textContent = String(gameState.base.hp);
+  }
+
+  statEls.p1Lives.textContent = String(gameState.lives.player1);
+  statEls.p2Lives.textContent = String(gameState.lives.player2);
+
+  const p1 = gameState.players.find((player) => player.id === "player1");
+  const p2 = gameState.players.find((player) => player.id === "player2");
+  syncPlayerBuff(p1, statEls.p1Item, statEls.p1Timer);
+  syncPlayerBuff(p2, statEls.p2Item, statEls.p2Timer);
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
+function getBaseBounds(state) {
+  if (!state.base) return null;
+  return {
+    left: state.base.x - state.base.width / 2,
+    right: state.base.x + state.base.width / 2,
+    top: state.base.y - state.base.height / 2,
+    bottom: state.base.y + state.base.height / 2
+  };
 }
 
-function randomBetween(min, max) {
-  return Math.random() * (max - min) + min;
+function getLivingPlayers(state) {
+  return state.players.filter((player) => player.alive && player.hp > 0);
 }
 
-function rectsOverlap(a, b) {
-  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+function hitsObstacle(tank, state) {
+  const bounds = tank.bounds;
+
+  for (const wall of state.walls) {
+    if (wall.hp <= 0) continue;
+    const wallBounds = {
+      left: wall.x - wall.w / 2,
+      right: wall.x + wall.w / 2,
+      top: wall.y - wall.h / 2,
+      bottom: wall.y + wall.h / 2
+    };
+    if (rectsOverlap(bounds, wallBounds)) return true;
+  }
+
+  const baseBounds = getBaseBounds(state);
+  if (tank.type === "enemy" && baseBounds && rectsOverlap(bounds, baseBounds)) {
+    return true;
+  }
+
+  const allTanks = [...state.players, ...state.enemies];
+  for (const other of allTanks) {
+    if (other === tank || !other.alive || other.hp <= 0) continue;
+    if (rectsOverlap(bounds, other.bounds)) return true;
+  }
+
+  return false;
 }
 
 function moveTank(tank, dt, state, intentX, intentY) {
-  if (intentX === 0 && intentY === 0) {
-    return;
-  }
+  if (intentX === 0 && intentY === 0) return;
 
+  const speedBoost = tank.power === "boost" ? 1.9 : 1;
   const length = Math.hypot(intentX, intentY) || 1;
-  const velocityX = (intentX / length) * tank.speed * dt;
-  const velocityY = (intentY / length) * tank.speed * dt;
+  const velocityX = (intentX / length) * tank.speed * speedBoost * dt;
+  const velocityY = (intentY / length) * tank.speed * speedBoost * dt;
 
   if (Math.abs(intentX) > Math.abs(intentY)) {
     tank.direction = intentX > 0 ? "right" : "left";
@@ -180,136 +309,187 @@ function moveTank(tank, dt, state, intentX, intentY) {
   const originalY = tank.y;
 
   tank.x = clamp(tank.x + velocityX, tank.width / 2, WORLD.width - tank.width / 2);
-  if (hitsObstacle(tank, state)) {
-    tank.x = originalX;
-  }
+  if (hitsObstacle(tank, state)) tank.x = originalX;
 
   tank.y = clamp(tank.y + velocityY, tank.height / 2, WORLD.height - tank.height / 2);
-  if (hitsObstacle(tank, state)) {
-    tank.y = originalY;
-  }
+  if (hitsObstacle(tank, state)) tank.y = originalY;
 }
 
-function hitsObstacle(tank, state) {
-  const bounds = tank.bounds;
-  const baseBounds = {
-    left: state.base.x - state.base.width / 2,
-    right: state.base.x + state.base.width / 2,
-    top: state.base.y - state.base.height / 2,
-    bottom: state.base.y + state.base.height / 2
-  };
+function fireLaser(tank, state) {
+  const dir = DIRECTIONS[tank.direction];
+  const targets = tank.type === "enemy"
+    ? state.players
+    : tank.type === "player" && state.mode === "versus"
+      ? state.players.filter((player) => player.id !== tank.id)
+      : state.enemies;
 
-  if (rectsOverlap(bounds, baseBounds) && tank.type !== "player") {
-    return true;
+  for (const target of targets) {
+    if (!target.alive || target.hp <= 0) continue;
+    const sameRow = dir.x !== 0 && Math.abs(target.y - tank.y) < 26 && Math.sign(target.x - tank.x) === dir.x;
+    const sameCol = dir.y !== 0 && Math.abs(target.x - tank.x) < 26 && Math.sign(target.y - tank.y) === dir.y;
+    if (sameRow || sameCol) {
+      target.hp -= 3;
+      state.explosions.push({ x: target.x, y: target.y, life: 0.24, size: 32, color: "255,105,105" });
+      if (target.hp <= 0) handleTankDestroyed(target, state, tank.id);
+    }
   }
 
   for (const wall of state.walls) {
-    if (wall.hp <= 0) {
-      continue;
-    }
-    const wallBounds = {
-      left: wall.x - wall.w / 2,
-      right: wall.x + wall.w / 2,
-      top: wall.y - wall.h / 2,
-      bottom: wall.y + wall.h / 2
-    };
-    if (rectsOverlap(bounds, wallBounds)) {
-      return true;
+    if (wall.hp <= 0) continue;
+    const sameRow = dir.x !== 0 && Math.abs(wall.y - tank.y) < wall.h / 2 + 10 && Math.sign(wall.x - tank.x) === dir.x;
+    const sameCol = dir.y !== 0 && Math.abs(wall.x - tank.x) < wall.w / 2 + 10 && Math.sign(wall.y - tank.y) === dir.y;
+    if (sameRow || sameCol) {
+      wall.hp -= 3;
     }
   }
 
-  const tanks = [state.player, ...state.enemies];
-  for (const other of tanks) {
-    if (other === tank || other.hp <= 0) {
-      continue;
-    }
-    if (rectsOverlap(bounds, other.bounds)) {
-      return true;
-    }
-  }
-
-  return false;
+  state.explosions.push({ x: tank.x + dir.x * 130, y: tank.y + dir.y * 130, life: 0.16, size: 110, color: "255,105,105" });
 }
 
 function shoot(tank, state) {
-  if (tank.cooldown > 0) {
+  if (!tank.alive || tank.cooldown > 0) return;
+
+  if (tank.power === "laser") {
+    fireLaser(tank, state);
+    tank.cooldown = 0.16;
     return;
   }
 
   const dir = DIRECTIONS[tank.direction];
-  const bulletSpeed = tank.type === "player" ? 360 : 250 + state.level * 8;
+  const isEnemy = tank.type === "enemy";
+  const rapidFactor = tank.power === "rapid" ? 0.25 : 1;
+  const bulletSpeed = isEnemy ? 460 + state.round * 18 : 920;
+
   state.bullets.push({
-    x: tank.x + dir.x * 24,
-    y: tank.y + dir.y * 24,
+    x: tank.x + dir.x * 28,
+    y: tank.y + dir.y * 28,
     vx: dir.x * bulletSpeed,
     vy: dir.y * bulletSpeed,
-    radius: 5,
-    owner: tank.type,
-    damage: 1
+    radius: isEnemy ? 5 : 5.5,
+    owner: tank.id,
+    ownerType: tank.type,
+    color: isEnemy ? "#ffd166" : "#f8ff71"
   });
-  tank.cooldown = tank.type === "player" ? 0.28 : randomBetween(0.9, 1.6);
+
+  tank.cooldown = (isEnemy ? randomBetween(0.35, 0.7) : 0.09) * rapidFactor;
 }
 
-function updatePlayer(dt, state) {
-  const player = state.player;
+function updatePlayers(dt, state) {
+  for (const config of PLAYER_CONFIGS) {
+    const player = state.players.find((item) => item.id === config.id);
+    if (!player || !player.alive || player.hp <= 0) continue;
 
-  if (player.hp <= 0) {
-    return;
+    let intentX = 0;
+    let intentY = 0;
+    if (keys.has(config.controls.left)) intentX -= 1;
+    if (keys.has(config.controls.right)) intentX += 1;
+    if (keys.has(config.controls.up)) intentY -= 1;
+    if (keys.has(config.controls.down)) intentY += 1;
+
+    moveTank(player, dt, state, intentX, intentY);
+    if (keys.has(config.controls.fire)) shoot(player, state);
   }
+}
 
-  let intentX = 0;
-  let intentY = 0;
-
-  if (keys.has("KeyA")) intentX -= 1;
-  if (keys.has("KeyD")) intentX += 1;
-  if (keys.has("KeyW")) intentY -= 1;
-  if (keys.has("KeyS")) intentY += 1;
-
-  moveTank(player, dt, state, intentX, intentY);
-
-  if (keys.has("KeyJ")) {
-    shoot(player, state);
+function getNearestPlayer(enemy, state) {
+  const players = getLivingPlayers(state);
+  if (players.length === 0) return null;
+  let nearest = players[0];
+  let best = Infinity;
+  for (const player of players) {
+    const distance = Math.hypot(player.x - enemy.x, player.y - enemy.y);
+    if (distance < best) {
+      best = distance;
+      nearest = player;
+    }
   }
+  return nearest;
 }
 
 function updateEnemies(dt, state) {
+  if (state.mode !== "single") return;
+
   for (const enemy of state.enemies) {
-    if (enemy.hp <= 0) {
-      continue;
-    }
+    if (!enemy.alive || enemy.hp <= 0) continue;
 
     enemy.aiTimer -= dt;
     enemy.fireTimer -= dt;
+    const target = getNearestPlayer(enemy, state);
 
     if (enemy.aiTimer <= 0) {
-      const options = ["up", "down", "left", "right"];
-      const playerDx = state.player.x - enemy.x;
-      const playerDy = state.player.y - enemy.y;
-      const preferVertical = Math.abs(playerDy) > Math.abs(playerDx);
-
-      if (Math.random() > 0.35) {
-        enemy.direction = preferVertical
-          ? playerDy > 0 ? "down" : "up"
-          : playerDx > 0 ? "right" : "left";
-      } else {
-        enemy.direction = options[Math.floor(Math.random() * options.length)];
-      }
-
-      enemy.aiTimer = randomBetween(0.6, 1.3);
+      const dx = target ? target.x - enemy.x : 0;
+      const dy = target ? target.y - enemy.y : 1;
+      enemy.direction = Math.abs(dx) > Math.abs(dy)
+        ? dx > 0 ? "right" : "left"
+        : dy > 0 ? "down" : "up";
+      enemy.aiTimer = randomBetween(0.15, 0.45);
     }
 
     const dir = DIRECTIONS[enemy.direction];
     moveTank(enemy, dt, state, dir.x, dir.y);
 
     if (enemy.fireTimer <= 0) {
-      const alignedX = Math.abs(enemy.x - state.player.x) < 26;
-      const alignedY = Math.abs(enemy.y - state.player.y) < 26;
-      if (alignedX || alignedY || Math.random() > 0.45) {
-        shoot(enemy, state);
-      }
-      enemy.fireTimer = randomBetween(1, 2);
+      shoot(enemy, state);
+      enemy.fireTimer = randomBetween(0.38, 0.82);
     }
   }
+}
+
+function collideBulletWithWalls(bullet, state) {
+  for (const wall of state.walls) {
+    if (wall.hp <= 0) continue;
+    if (
+      bullet.x > wall.x - wall.w / 2 &&
+      bullet.x < wall.x + wall.w / 2 &&
+      bullet.y > wall.y - wall.h / 2 &&
+      bullet.y < wall.y + wall.h / 2
+    ) {
+      wall.hp -= 1;
+      state.explosions.push({ x: bullet.x, y: bullet.y, life: 0.16, size: 18, color: "255,201,94" });
+      return true;
+    }
+  }
+  return false;
+}
+
+function collideBulletWithBase(bullet, state) {
+  const baseBounds = getBaseBounds(state);
+  if (!baseBounds) return false;
+  if (
+    bullet.x > baseBounds.left &&
+    bullet.x < baseBounds.right &&
+    bullet.y > baseBounds.top &&
+    bullet.y < baseBounds.bottom
+  ) {
+    if (bullet.ownerType === "enemy") {
+      state.base.hp -= 1;
+      state.explosions.push({ x: state.base.x, y: state.base.y, life: 0.24, size: 34, color: "255,141,99" });
+      if (state.base.hp <= 0) endGame("基地失守", "这局没守住，重新开始再来。");
+    }
+    return true;
+  }
+  return false;
+}
+
+function collideBulletWithTanks(bullet, state) {
+  const targets = bullet.ownerType === "enemy"
+    ? state.players
+    : state.mode === "versus"
+      ? state.players.filter((player) => player.id !== bullet.owner)
+      : state.enemies;
+
+  for (const tank of targets) {
+    if (!tank.alive || tank.hp <= 0) continue;
+    const bounds = tank.bounds;
+    const hit = bullet.x > bounds.left && bullet.x < bounds.right && bullet.y > bounds.top && bullet.y < bounds.bottom;
+    if (!hit) continue;
+
+    tank.hp -= 1;
+    state.explosions.push({ x: bullet.x, y: bullet.y, life: 0.2, size: 24, color: tank.type === "enemy" ? "255,141,99" : tank.accent });
+    if (tank.hp <= 0) handleTankDestroyed(tank, state, bullet.owner);
+    return true;
+  }
+  return false;
 }
 
 function updateBullets(dt, state) {
@@ -327,235 +507,179 @@ function updateBullets(dt, state) {
     ) {
       return false;
     }
-
-    if (collideBulletWithWalls(bullet, state)) {
-      return false;
-    }
-
-    if (collideBulletWithBase(bullet, state)) {
-      return false;
-    }
-
-    if (collideBulletWithTanks(bullet, state)) {
-      return false;
-    }
-
+    if (collideBulletWithWalls(bullet, state)) return false;
+    if (collideBulletWithBase(bullet, state)) return false;
+    if (collideBulletWithTanks(bullet, state)) return false;
     return true;
   });
 }
 
-function collideBulletWithWalls(bullet, state) {
-  for (const wall of state.walls) {
-    if (wall.hp <= 0) {
-      continue;
-    }
-    if (
-      bullet.x > wall.x - wall.w / 2 &&
-      bullet.x < wall.x + wall.w / 2 &&
-      bullet.y > wall.y - wall.h / 2 &&
-      bullet.y < wall.y + wall.h / 2
-    ) {
-      wall.hp -= 1;
-      state.explosions.push({ x: bullet.x, y: bullet.y, life: 0.24, size: 18 });
-      return true;
-    }
-  }
-  return false;
+function spawnItem(state) {
+  const types = Object.keys(ITEM_TYPES);
+  const type = types[Math.floor(Math.random() * types.length)];
+  state.items.push({
+    type,
+    x: randomBetween(120, WORLD.width - 120),
+    y: randomBetween(120, WORLD.height - 120),
+    radius: 16,
+    life: 9
+  });
 }
 
-function collideBulletWithBase(bullet, state) {
-  if (
-    bullet.x > state.base.x - state.base.width / 2 &&
-    bullet.x < state.base.x + state.base.width / 2 &&
-    bullet.y > state.base.y - state.base.height / 2 &&
-    bullet.y < state.base.y + state.base.height / 2
-  ) {
-    if (bullet.owner === "enemy") {
-      state.base.hp -= 1;
-      state.explosions.push({ x: state.base.x, y: state.base.y, life: 0.35, size: 28 });
-      if (state.base.hp <= 0) {
-        endGame("基地被摧毁", "这次防线失守了，点击按钮重新开战。");
+function updateItems(dt, state) {
+  state.itemTimer -= dt;
+  if (state.itemTimer <= 0) {
+    spawnItem(state);
+    state.itemTimer = randomBetween(6, 8.5);
+  }
+
+  for (const item of state.items) {
+    item.life -= dt;
+  }
+  state.items = state.items.filter((item) => item.life > 0);
+
+  for (const player of state.players) {
+    if (!player.alive || player.hp <= 0) continue;
+    for (const item of state.items) {
+      const distance = Math.hypot(player.x - item.x, player.y - item.y);
+      if (distance < 24) {
+        player.power = item.type;
+        player.powerTime = ITEM_TYPES[item.type].duration;
+        item.life = 0;
       }
     }
-    return true;
   }
-  return false;
+  state.items = state.items.filter((item) => item.life > 0);
 }
 
-function collideBulletWithTanks(bullet, state) {
-  const targets = bullet.owner === "player" ? state.enemies : [state.player];
+function handleTankDestroyed(tank, state) {
+  tank.alive = false;
+  state.explosions.push({ x: tank.x, y: tank.y, life: 0.32, size: 38, color: tank.type === "enemy" ? "255,141,99" : tank.accent });
 
-  for (const tank of targets) {
-    if (tank.hp <= 0) {
-      continue;
-    }
-
-    const bounds = tank.bounds;
-    const hit =
-      bullet.x > bounds.left &&
-      bullet.x < bounds.right &&
-      bullet.y > bounds.top &&
-      bullet.y < bounds.bottom;
-
-    if (!hit) {
-      continue;
-    }
-
-    if (tank.type === "player" && (tank.shield > 0 || state.invulnerableTime > 0)) {
-      state.explosions.push({ x: bullet.x, y: bullet.y, life: 0.16, size: 16 });
-      return true;
-    }
-
-    tank.hp -= bullet.damage;
-    state.explosions.push({ x: bullet.x, y: bullet.y, life: 0.25, size: 24 });
-
-    if (tank.hp <= 0) {
-      if (tank.type === "enemy") {
-        state.score += 100;
-      } else {
-        state.lives -= 1;
-        if (state.lives <= 0) {
-          endGame("全军覆没", "你的坦克已经被击毁，点击按钮重新开始。");
-        } else {
-          respawnPlayer(state);
-        }
-      }
-    }
-
-    return true;
+  if (tank.type === "enemy") {
+    state.score += 100;
+    return;
   }
 
-  return false;
-}
+  state.lives[tank.id] = Math.max(0, state.lives[tank.id] - 1);
 
-function respawnPlayer(state) {
-  state.player = createPlayer();
-  state.invulnerableTime = 2;
+  if (state.mode === "versus") {
+    const winnerId = tank.id === "player1" ? "player2" : "player1";
+    state.wins[winnerId] += 1;
+    state.status = "ended";
+    setOverlay(`${winnerId === "player1" ? "1P" : "2P"} 获胜`, "点击开始战斗继续下一回合。", true);
+    return;
+  }
+
+  if (state.lives[tank.id] > 0) {
+    state.players[0] = createPlayer(PLAYER_CONFIGS[0], "single");
+  } else {
+    endGame("全军覆没", "你的坦克被打爆了，重新开始再来。");
+  }
 }
 
 function updateEffects(dt, state) {
   state.explosions = state.explosions.filter((effect) => {
     effect.life -= dt;
-    effect.size += dt * 30;
+    effect.size += dt * 46;
     return effect.life > 0;
   });
 
-  state.player.cooldown = Math.max(0, state.player.cooldown - dt);
-  state.player.shield = Math.max(0, state.player.shield - dt);
-  state.shieldCooldown = Math.max(0, state.shieldCooldown - dt);
-  state.invulnerableTime = Math.max(0, state.invulnerableTime - dt);
-
-  for (const enemy of state.enemies) {
-    enemy.cooldown = Math.max(0, enemy.cooldown - dt);
+  for (const tank of [...state.players, ...state.enemies]) {
+    if (!tank.alive) continue;
+    tank.cooldown = Math.max(0, tank.cooldown - dt);
+    if (tank.powerTime > 0) {
+      tank.powerTime -= dt;
+      if (tank.powerTime <= 0) {
+        tank.power = null;
+        tank.powerTime = 0;
+      }
+    }
   }
-}
-
-function useShield(state) {
-  if (state.shieldCooldown > 0 || state.player.hp <= 0) {
-    return;
-  }
-  state.player.shield = 3.2;
-  state.shieldCooldown = 8;
 }
 
 function cleanupState(state) {
   state.walls = state.walls.filter((wall) => wall.hp > 0);
-  state.enemies = state.enemies.filter((enemy) => enemy.hp > 0);
+  state.enemies = state.enemies.filter((enemy) => enemy.alive && enemy.hp > 0);
 
-  if (state.status === "running" && state.enemies.length === 0) {
-    state.level += 1;
-    state.walls = createWalls();
+  if (state.mode === "single" && state.status === "running" && state.enemies.length === 0) {
+    state.round += 1;
+    state.walls = createWalls("single");
     state.base.hp = Math.min(state.base.maxHp, state.base.hp + 1);
     spawnEnemyWave(state);
-    setOverlay(`第 ${state.level} 关`, "敌军增援已抵达。", true);
+    setOverlay(`第 ${state.round} 关`, "敌军更猛了，道具也会继续掉。", true);
     window.setTimeout(() => {
-      if (gameState && gameState.status === "running") {
-        setOverlay("", "", false);
-      }
+      if (gameState && gameState.status === "running") setOverlay("", "", false);
     }, 900);
   }
 }
 
 function endGame(title, text) {
-  if (!gameState || gameState.status === "ended") {
-    return;
-  }
+  if (!gameState || gameState.status === "ended") return;
   gameState.status = "ended";
   setOverlay(title, text, true);
 }
 
 function togglePause() {
-  if (!gameState || gameState.status === "idle" || gameState.status === "ended") {
-    return;
-  }
-
+  if (!gameState || gameState.status === "ended" || gameState.status === "idle") return;
   if (gameState.status === "paused") {
     gameState.status = "running";
     setOverlay("", "", false);
   } else {
     gameState.status = "paused";
-    setOverlay("已暂停", "按 P 继续战斗。", true);
+    setOverlay("已暂停", "按 P 继续。", true);
   }
 }
 
 function update(dt) {
-  if (!gameState || gameState.status !== "running") {
-    return;
-  }
-
-  updatePlayer(dt, gameState);
+  if (!gameState || gameState.status !== "running") return;
+  updatePlayers(dt, gameState);
   updateEnemies(dt, gameState);
   updateBullets(dt, gameState);
+  updateItems(dt, gameState);
   updateEffects(dt, gameState);
   cleanupState(gameState);
   syncStats();
 }
 
 function drawTank(tank) {
+  if (!tank.alive || tank.hp <= 0) return;
+
   ctx.save();
   ctx.translate(tank.x, tank.y);
   ctx.rotate(DIRECTIONS[tank.direction].angle);
-
   ctx.fillStyle = tank.color;
   ctx.fillRect(-tank.width / 2, -tank.height / 2, tank.width, tank.height);
   ctx.fillRect(-tank.width / 2 - 6, -tank.height / 2, 6, tank.height);
   ctx.fillRect(tank.width / 2, -tank.height / 2, 6, tank.height);
-
-  ctx.fillStyle = "#1f2a2f";
+  ctx.fillStyle = "#18242b";
   ctx.fillRect(-9, -9, 18, 18);
   ctx.fillRect(0, -4, tank.width / 2 + 12, 8);
 
-  if (tank.type === "player" && tank.shield > 0) {
-    ctx.strokeStyle = "rgba(125, 223, 100, 0.85)";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(0, 0, tank.width, 0, Math.PI * 2);
-    ctx.stroke();
+  if (tank.type === "player") {
+    ctx.fillStyle = "rgba(6, 15, 22, 0.58)";
+    ctx.fillRect(-12, 16, 24, 12);
+    ctx.fillStyle = "#f4f1e7";
+    ctx.font = "bold 11px Segoe UI";
+    ctx.textAlign = "center";
+    ctx.fillText(tank.label, 0, 25);
   }
-
   ctx.restore();
 }
 
 function drawWalls(state) {
   for (const wall of state.walls) {
     const ratio = wall.hp / wall.maxHp;
-    ctx.fillStyle = ratio > 0.5 ? "#c28b4f" : "#8f5b34";
+    ctx.fillStyle = ratio > 0.6 ? "#c69152" : ratio > 0.25 ? "#9b673d" : "#6b472f";
     ctx.fillRect(wall.x - wall.w / 2, wall.y - wall.h / 2, wall.w, wall.h);
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.18)";
-    ctx.strokeRect(wall.x - wall.w / 2, wall.y - wall.h / 2, wall.w, wall.h);
   }
 }
 
 function drawBase(state) {
-  ctx.fillStyle = state.base.hp > 2 ? "#4db6ff" : "#ff8a65";
-  ctx.fillRect(
-    state.base.x - state.base.width / 2,
-    state.base.y - state.base.height / 2,
-    state.base.width,
-    state.base.height
-  );
-
-  ctx.fillStyle = "#0e1a1f";
+  if (!state.base) return;
+  ctx.fillStyle = state.base.hp > 2 ? "#56c4ff" : "#ff8d63";
+  ctx.fillRect(state.base.x - state.base.width / 2, state.base.y - state.base.height / 2, state.base.width, state.base.height);
+  ctx.fillStyle = "#0d171b";
   ctx.font = "bold 14px Segoe UI";
   ctx.textAlign = "center";
   ctx.fillText("BASE", state.base.x, state.base.y + 5);
@@ -564,59 +688,85 @@ function drawBase(state) {
 function drawBullets(state) {
   for (const bullet of state.bullets) {
     ctx.beginPath();
-    ctx.fillStyle = bullet.owner === "player" ? "#f9f871" : "#ffd166";
+    ctx.fillStyle = bullet.color;
     ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
     ctx.fill();
+  }
+}
+
+function drawItems(state) {
+  for (const item of state.items) {
+    ctx.beginPath();
+    ctx.fillStyle = ITEM_TYPES[item.type].color;
+    ctx.arc(item.x, item.y, item.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#091117";
+    ctx.font = "bold 11px Segoe UI";
+    ctx.textAlign = "center";
+    ctx.fillText(ITEM_TYPES[item.type].label[0], item.x, item.y + 4);
   }
 }
 
 function drawExplosions(state) {
   for (const effect of state.explosions) {
     ctx.beginPath();
-    ctx.fillStyle = `rgba(255, 196, 87, ${Math.max(effect.life * 2.4, 0)})`;
+    ctx.fillStyle = `rgba(${effect.color}, ${Math.max(effect.life * 2.2, 0)})`;
     ctx.arc(effect.x, effect.y, effect.size, 0, Math.PI * 2);
     ctx.fill();
   }
 }
 
 function drawHud(state) {
-  ctx.fillStyle = "rgba(8, 16, 20, 0.55)";
-  ctx.fillRect(18, 14, 210, 78);
+  const players = state.players.map((player, index) => ({ player, x: 18 + index * 220, y: 18 }));
+  for (const card of players) {
+    const player = card.player;
+    ctx.fillStyle = "rgba(6, 15, 23, 0.62)";
+    ctx.fillRect(card.x, card.y, 200, 76);
+    ctx.fillStyle = player.color;
+    ctx.font = "bold 16px Segoe UI";
+    ctx.textAlign = "left";
+    ctx.fillText(`${player.label} 战况`, card.x + 12, card.y + 22);
+    ctx.fillStyle = "#edf4ef";
+    ctx.font = "14px Segoe UI";
+    ctx.fillText(`生命: ${state.lives[player.id]}`, card.x + 12, card.y + 46);
+    const weapon = player.power ? ITEM_TYPES[player.power].label : "普通炮";
+    ctx.fillText(`武器: ${weapon}`, card.x + 12, card.y + 66);
+  }
 
-  ctx.fillStyle = "#f5f1e8";
-  ctx.font = "16px Segoe UI";
-  ctx.textAlign = "left";
-  ctx.fillText(`基地耐久: ${state.base.hp}/${state.base.maxHp}`, 30, 40);
-  ctx.fillText(`护盾冷却: ${state.shieldCooldown > 0 ? state.shieldCooldown.toFixed(1) + "s" : "就绪"}`, 30, 66);
-  ctx.fillText(`状态: ${state.status === "paused" ? "暂停" : "战斗中"}`, 30, 92);
+  ctx.fillStyle = "rgba(6, 15, 23, 0.62)";
+  ctx.fillRect(WORLD.width - 220, 18, 202, 92);
+  ctx.fillStyle = "#edf4ef";
+  ctx.font = "14px Segoe UI";
+  ctx.fillText(
+    state.mode === "versus" ? `比分: ${state.wins.player1}:${state.wins.player2}` : `基地耐久: ${state.base.hp}/${state.base.maxHp}`,
+    WORLD.width - 206,
+    44
+  );
+  ctx.fillText(
+    state.mode === "versus" ? `回合: ${state.round}` : `敌军剩余: ${state.enemies.length}`,
+    WORLD.width - 206,
+    68
+  );
+  ctx.fillText(`状态: ${state.status === "paused" ? "暂停" : "战斗中"}`, WORLD.width - 206, 92);
 }
 
 function render() {
   ctx.clearRect(0, 0, WORLD.width, WORLD.height);
-
-  if (!gameState) {
-    return;
-  }
-
+  if (!gameState) return;
   drawWalls(gameState);
   drawBase(gameState);
-  drawTank(gameState.player);
-  for (const enemy of gameState.enemies) {
-    drawTank(enemy);
-  }
+  drawItems(gameState);
+  for (const player of gameState.players) drawTank(player);
+  for (const enemy of gameState.enemies) drawTank(enemy);
   drawBullets(gameState);
   drawExplosions(gameState);
   drawHud(gameState);
 }
 
 function loop(timestamp) {
-  if (!lastFrame) {
-    lastFrame = timestamp;
-  }
-
+  if (!lastFrame) lastFrame = timestamp;
   const dt = Math.min((timestamp - lastFrame) / 1000, 0.033);
   lastFrame = timestamp;
-
   update(dt);
   render();
   window.requestAnimationFrame(loop);
@@ -624,13 +774,12 @@ function loop(timestamp) {
 
 document.addEventListener("keydown", (event) => {
   keys.add(event.code);
-
   if (event.code === "KeyP") {
+    event.preventDefault();
     togglePause();
   }
-
-  if (event.code === "KeyK" && gameState) {
-    useShield(gameState);
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Space"].includes(event.code)) {
+    event.preventDefault();
   }
 });
 
@@ -638,9 +787,11 @@ document.addEventListener("keyup", (event) => {
   keys.delete(event.code);
 });
 
+singleModeButton.addEventListener("click", () => setMode("single"));
+versusModeButton.addEventListener("click", () => setMode("versus"));
 startButton.addEventListener("click", resetGame);
 
-gameState = createInitialState();
-setOverlay("按下开始按钮", "准备好后进入战场。", true);
+gameState = createInitialState(selectedMode);
+setMode("single");
 syncStats();
 window.requestAnimationFrame(loop);
