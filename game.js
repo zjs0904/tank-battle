@@ -24,6 +24,10 @@ const statEls = {
 };
 
 const WORLD = { width: canvas.width, height: canvas.height };
+const backdropCanvas = document.createElement("canvas");
+backdropCanvas.width = WORLD.width;
+backdropCanvas.height = WORLD.height;
+const backdropCtx = backdropCanvas.getContext("2d");
 const keys = new Set();
 let selectedMode = "single";
 let gameState = null;
@@ -57,9 +61,11 @@ const PLAYER_CONFIGS = [
 ];
 
 const ITEM_TYPES = {
-  laser: { label: "激光炮", color: "#ff6666", duration: 9 },
-  rapid: { label: "连发", color: "#ffd84f", duration: 9 },
-  boost: { label: "加速", color: "#59f0c2", duration: 9 }
+  laser: { label: "\u6fc0\u5149\u70ae", short: "\u6fc0", color: "#ff6666", duration: 6.5, kind: "timed" },
+  rapid: { label: "\u901f\u5c04", short: "\u901f", color: "#ffd84f", duration: 7.2, kind: "timed" },
+  boost: { label: "\u63a8\u8fdb\u5668", short: "\u51b2", color: "#59f0c2", duration: 6.5, kind: "timed" },
+  shield: { label: "\u62a4\u76fe", short: "\u76fe", color: "#7fb4ff", duration: 4.5, kind: "timed", shieldHits: 2 },
+  repair: { label: "\u7ef4\u4fee\u5305", short: "\u4fee", color: "#ff9f63", duration: 0, kind: "instant" }
 };
 
 class Tank {
@@ -82,6 +88,7 @@ class Tank {
     this.alive = true;
     this.power = null;
     this.powerTime = 0;
+    this.shieldHits = 0;
   }
 
   get bounds() {
@@ -106,6 +113,69 @@ function rectsOverlap(a, b) {
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 
+function rangesOverlap(a1, a2, b1, b2) {
+  return Math.max(a1, b1) < Math.min(a2, b2);
+}
+
+function createWall(x, y, w, h, options = {}) {
+  const destructible = options.destructible !== false;
+  const hp = destructible ? options.hp ?? 5 : Number.POSITIVE_INFINITY;
+  return {
+    x,
+    y,
+    w,
+    h,
+    hp,
+    maxHp: destructible ? hp : Number.POSITIVE_INFINITY,
+    destructible,
+    style: options.style || (destructible ? "brick" : "steel")
+  };
+}
+
+function getWallBounds(wall) {
+  return {
+    left: wall.x - wall.w / 2,
+    right: wall.x + wall.w / 2,
+    top: wall.y - wall.h / 2,
+    bottom: wall.y + wall.h / 2
+  };
+}
+
+function buildArenaBackdrop() {
+  const gradient = backdropCtx.createLinearGradient(0, 0, 0, WORLD.height);
+  gradient.addColorStop(0, "#355936");
+  gradient.addColorStop(1, "#213823");
+  backdropCtx.fillStyle = gradient;
+  backdropCtx.fillRect(0, 0, WORLD.width, WORLD.height);
+
+  backdropCtx.fillStyle = "rgba(255, 255, 255, 0.05)";
+  for (let x = 0; x < WORLD.width; x += 32) {
+    backdropCtx.fillRect(x, 0, 1, WORLD.height);
+  }
+  for (let y = 0; y < WORLD.height; y += 32) {
+    backdropCtx.fillRect(0, y, WORLD.width, 1);
+  }
+}
+
+function sweepHitsRect(startX, startY, endX, endY, rect, padding = 0) {
+  const minX = Math.min(startX, endX);
+  const maxX = Math.max(startX, endX);
+  const minY = Math.min(startY, endY);
+  const maxY = Math.max(startY, endY);
+  return (
+    maxX >= rect.left - padding &&
+    minX <= rect.right + padding &&
+    maxY >= rect.top - padding &&
+    minY <= rect.bottom + padding
+  );
+}
+
+function clampExplosions(state) {
+  if (state.explosions.length > 28) {
+    state.explosions.splice(0, state.explosions.length - 28);
+  }
+}
+
 function createPlayer(config, mode) {
   const spawn = mode === "versus" ? config.spawnVersus : config.spawnSingle;
   return new Tank({
@@ -116,7 +186,7 @@ function createPlayer(config, mode) {
     accent: config.accent,
     x: spawn.x,
     y: spawn.y,
-    speed: mode === "single" ? 390 : 320,
+    speed: mode === "single" ? 360 : 320,
     hp: 1
   });
 }
@@ -124,27 +194,29 @@ function createPlayer(config, mode) {
 function createWalls(mode) {
   if (mode === "versus") {
     return [
-      { x: WORLD.width / 2, y: 120, w: 160, h: 30, hp: 4, maxHp: 4 },
-      { x: WORLD.width / 2, y: WORLD.height - 120, w: 160, h: 30, hp: 4, maxHp: 4 },
-      { x: WORLD.width / 2, y: WORLD.height / 2, w: 30, h: 160, hp: 4, maxHp: 4 },
-      { x: 280, y: WORLD.height / 2, w: 30, h: 120, hp: 4, maxHp: 4 },
-      { x: WORLD.width - 280, y: WORLD.height / 2, w: 30, h: 120, hp: 4, maxHp: 4 }
+      createWall(WORLD.width / 2, 120, 160, 30, { hp: 4 }),
+      createWall(WORLD.width / 2, WORLD.height - 120, 160, 30, { hp: 4 }),
+      createWall(WORLD.width / 2, WORLD.height / 2, 30, 160, { destructible: false, style: "steel" }),
+      createWall(280, WORLD.height / 2, 30, 120, { hp: 4 }),
+      createWall(WORLD.width - 280, WORLD.height / 2, 30, 120, { hp: 4 })
     ];
   }
 
   return [
-    { x: 170, y: 150, w: 132, h: 30, hp: 5, maxHp: 5 },
-    { x: 790, y: 150, w: 132, h: 30, hp: 5, maxHp: 5 },
-    { x: 300, y: 270, w: 30, h: 136, hp: 5, maxHp: 5 },
-    { x: 660, y: 270, w: 30, h: 136, hp: 5, maxHp: 5 },
-    { x: 480, y: 180, w: 180, h: 30, hp: 5, maxHp: 5 },
-    { x: 480, y: 390, w: 220, h: 30, hp: 5, maxHp: 5 },
-    { x: 190, y: 420, w: 140, h: 30, hp: 5, maxHp: 5 },
-    { x: 770, y: 420, w: 140, h: 30, hp: 5, maxHp: 5 }
+    createWall(170, 150, 132, 30, { hp: 4 }),
+    createWall(790, 150, 132, 30, { hp: 4 }),
+    createWall(300, 270, 30, 136, { hp: 4 }),
+    createWall(660, 270, 30, 136, { hp: 4 }),
+    createWall(480, 180, 180, 30, { destructible: false, style: "steel" }),
+    createWall(480, 390, 220, 30, { hp: 4 }),
+    createWall(190, 420, 140, 30, { hp: 4 }),
+    createWall(770, 420, 140, 30, { hp: 4 }),
+    createWall(410, 540, 30, 86, { destructible: false, style: "steel" }),
+    createWall(550, 540, 30, 86, { destructible: false, style: "steel" })
   ];
 }
 
-function createInitialState(mode) {
+function createInitialState(mode, carry = {}) {
   const players = mode === "versus"
     ? PLAYER_CONFIGS.map((config) => createPlayer(config, mode))
     : [createPlayer(PLAYER_CONFIGS[0], mode)];
@@ -157,13 +229,14 @@ function createInitialState(mode) {
     bullets: [],
     enemies: [],
     explosions: [],
+    beams: [],
     items: [],
     walls: createWalls(mode),
-    base: mode === "single" ? { x: WORLD.width / 2, y: WORLD.height - 32, width: 76, height: 28, hp: 5, maxHp: 5 } : null,
+    base: mode === "single" ? { x: WORLD.width / 2, y: WORLD.height - 32, width: 76, height: 28, hp: 6, maxHp: 6 } : null,
     players,
-    lives: { player1: 3, player2: mode === "versus" ? 3 : 0 },
-    wins: { player1: 0, player2: 0 },
-    itemTimer: 4.5
+    lives: { player1: mode === "versus" ? 1 : 4, player2: mode === "versus" ? 1 : 0 },
+    wins: carry.wins || { player1: 0, player2: 0 },
+    itemTimer: mode === "versus" ? 3.6 : 4.8
   };
 
   if (mode === "single") spawnEnemyWave(state);
@@ -171,8 +244,8 @@ function createInitialState(mode) {
 }
 
 function spawnEnemyWave(state) {
-  const count = Math.min(4 + state.round * 2, 14);
-  const spawnPoints = [80, 220, 360, 480, 600, 740, 880];
+  const count = Math.min(3 + state.round, 7);
+  const spawnPoints = [92, 240, 388, 536, 684, 832];
   state.enemies = Array.from({ length: count }, (_, index) => {
     const lane = spawnPoints[index % spawnPoints.length];
     const row = Math.floor(index / spawnPoints.length);
@@ -182,10 +255,10 @@ function spawnEnemyWave(state) {
       color: "#ff785f",
       accent: "255,120,95",
       x: lane,
-      y: 80 + row * 56,
-      speed: 140 + state.round * 16,
+      y: 82 + row * 58,
+      speed: 96 + state.round * 10,
       direction: "down",
-      hp: 1
+      hp: state.round >= 5 && index === count - 1 ? 2 : 1
     });
   });
 }
@@ -198,11 +271,11 @@ function setMode(mode) {
   selectedMode = mode;
   singleModeButton.classList.toggle("active", mode === "single");
   versusModeButton.classList.toggle("active", mode === "versus");
-  modeBadge.textContent = mode === "versus" ? "双人对战" : "单人闯关";
+  modeBadge.textContent = mode === "versus" ? "\u53cc\u4eba\u5bf9\u6218" : "\u5355\u4eba\u95ef\u5173";
   updateMobileControlsVisibility();
   setOverlay(
-    mode === "versus" ? "双人对战已就绪" : "单人闯关已就绪",
-    mode === "versus" ? "1P 和 2P 互相对轰，抢到强道具就能起节奏。" : "躲弹、抢道具、清敌军、守基地。",
+    mode === "versus" ? "\u53cc\u4eba\u5bf9\u6218\u5df2\u5c31\u7eea" : "\u5355\u4eba\u95ef\u5173\u5df2\u5c31\u7eea",
+    mode === "versus" ? "1P \u548c 2P \u4e92\u76f8\u5bf9\u8f70\uff0c\u8c01\u63a7\u8282\u594f\u8c01\u8d62\u3002" : "\u654c\u519b\u66f4\u5c11\u3001\u66f4\u6162\uff0c\u5b88\u4f4f\u57fa\u5730\u5e76\u5229\u7528\u9053\u5177\u63a8\u8fdb\u5173\u5361\u3002",
     true
   );
 }
@@ -214,20 +287,36 @@ function setOverlay(title, text, visible) {
 }
 
 function resetGame() {
-  gameState = createInitialState(selectedMode);
+  const carry = selectedMode === "versus" && gameState && gameState.mode === "versus"
+    ? { wins: { ...gameState.wins } }
+    : {};
+  gameState = createInitialState(selectedMode, carry);
   gameState.status = "running";
-  modeBadge.textContent = selectedMode === "versus" ? "双人对战" : "单人闯关";
+  modeBadge.textContent = selectedMode === "versus" ? "\u53cc\u4eba\u5bf9\u6218" : "\u5355\u4eba\u95ef\u5173";
   updateMobileControlsVisibility();
-  setOverlay("战斗开始", "移动端单人模式可以直接用屏幕按钮操作。", false);
+  setOverlay("\u6218\u6597\u5f00\u59cb", selectedMode === "single" ? "\u79fb\u52a8\u7aef\u6309\u94ae\u5df2\u7ecf\u653e\u5230\u6218\u573a\u4e0b\u65b9\uff0c\u5148\u6e05\u7b2c\u4e00\u6ce2\u719f\u6089\u8282\u594f\u3002" : "\u62a2\u4f4d\u7f6e\u3001\u62a2\u8282\u594f\u3001\u62a2\u5148\u624b\u3002", false);
   syncStats();
 }
 
 function syncPlayerBuff(player, itemEl, timerEl) {
-  if (!player || !player.alive || !player.power || player.powerTime <= 0) {
-    itemEl.textContent = "无";
+  if (!player || !player.alive || (!player.power && player.shieldHits <= 0)) {
+    itemEl.textContent = "-";
     timerEl.textContent = "0s";
     return;
   }
+
+  if (player.power === "shield" && player.shieldHits > 0) {
+    itemEl.textContent = "\u62a4\u76fe";
+    timerEl.textContent = `${player.shieldHits}\u5c42 ${Math.max(player.powerTime, 0).toFixed(1)}s`;
+    return;
+  }
+
+  if (!player.power || player.powerTime <= 0) {
+    itemEl.textContent = "-";
+    timerEl.textContent = "0s";
+    return;
+  }
+
   itemEl.textContent = ITEM_TYPES[player.power].label;
   timerEl.textContent = `${player.powerTime.toFixed(1)}s`;
 }
@@ -272,14 +361,8 @@ function hitsObstacle(tank, state) {
   const bounds = tank.bounds;
 
   for (const wall of state.walls) {
-    if (wall.hp <= 0) continue;
-    const wallBounds = {
-      left: wall.x - wall.w / 2,
-      right: wall.x + wall.w / 2,
-      top: wall.y - wall.h / 2,
-      bottom: wall.y + wall.h / 2
-    };
-    if (rectsOverlap(bounds, wallBounds)) return true;
+    if (wall.destructible && wall.hp <= 0) continue;
+    if (rectsOverlap(bounds, getWallBounds(wall))) return true;
   }
 
   const baseBounds = getBaseBounds(state);
@@ -294,9 +377,9 @@ function hitsObstacle(tank, state) {
 }
 
 function moveTank(tank, dt, state, intentX, intentY) {
-  if (intentX === 0 && intentY === 0) return;
+  if (intentX === 0 && intentY === 0) return false;
 
-  const speedBoost = tank.power === "boost" ? 1.9 : 1;
+  const speedBoost = tank.power === "boost" ? 1.5 : 1;
   const length = Math.hypot(intentX, intentY) || 1;
   const velocityX = (intentX / length) * tank.speed * speedBoost * dt;
   const velocityY = (intentY / length) * tank.speed * speedBoost * dt;
@@ -309,39 +392,112 @@ function moveTank(tank, dt, state, intentX, intentY) {
 
   const originalX = tank.x;
   const originalY = tank.y;
+  let moved = false;
   tank.x = clamp(tank.x + velocityX, tank.width / 2, WORLD.width - tank.width / 2);
   if (hitsObstacle(tank, state)) tank.x = originalX;
+  else moved = moved || Math.abs(tank.x - originalX) > 0.01;
   tank.y = clamp(tank.y + velocityY, tank.height / 2, WORLD.height - tank.height / 2);
   if (hitsObstacle(tank, state)) tank.y = originalY;
+  else moved = moved || Math.abs(tank.y - originalY) > 0.01;
+  return moved;
+}
+
+function resolveTankOverlaps(state) {
+  const tanks = [...state.players, ...state.enemies].filter((tank) => tank.alive && tank.hp > 0);
+  for (let i = 0; i < tanks.length; i++) {
+    for (let j = i + 1; j < tanks.length; j++) {
+      const a = tanks[i];
+      const b = tanks[j];
+      if (!rectsOverlap(a.bounds, b.bounds)) continue;
+
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const overlapX = a.width - Math.abs(dx);
+      const overlapY = a.height - Math.abs(dy);
+      if (overlapX <= 0 || overlapY <= 0) continue;
+
+      if (overlapX < overlapY) {
+        const push = overlapX / 2 + 0.5;
+        const dir = dx >= 0 ? 1 : -1;
+        a.x = clamp(a.x - dir * push, a.width / 2, WORLD.width - a.width / 2);
+        b.x = clamp(b.x + dir * push, b.width / 2, WORLD.width - b.width / 2);
+      } else {
+        const push = overlapY / 2 + 0.5;
+        const dir = dy >= 0 ? 1 : -1;
+        a.y = clamp(a.y - dir * push, a.height / 2, WORLD.height - a.height / 2);
+        b.y = clamp(b.y + dir * push, b.height / 2, WORLD.height - b.height / 2);
+      }
+    }
+  }
 }
 
 function fireLaser(tank, state) {
   const dir = DIRECTIONS[tank.direction];
+  const beamWidth = 18;
+  const startX = tank.x + dir.x * 28;
+  const startY = tank.y + dir.y * 28;
+  let length = dir.x > 0 ? WORLD.width - startX : dir.x < 0 ? startX : dir.y > 0 ? WORLD.height - startY : startY;
+
   const targets = tank.type === "enemy"
     ? state.players
     : tank.type === "player" && state.mode === "versus"
       ? state.players.filter((player) => player.id !== tank.id)
       : state.enemies;
 
+  for (const wall of state.walls) {
+    if (wall.destructible || wall.hp <= 0) continue;
+    const bounds = getWallBounds(wall);
+    const aligned = dir.x !== 0
+      ? rangesOverlap(startY - beamWidth / 2, startY + beamWidth / 2, bounds.top, bounds.bottom)
+      : rangesOverlap(startX - beamWidth / 2, startX + beamWidth / 2, bounds.left, bounds.right);
+    if (!aligned) continue;
+    const distance = dir.x > 0 ? bounds.left - startX : dir.x < 0 ? startX - bounds.right : dir.y > 0 ? bounds.top - startY : startY - bounds.bottom;
+    if (distance >= 0 && distance < length) length = distance;
+  }
+
+  const hitTank = (target) => {
+    const bounds = target.bounds;
+    const aligned = dir.x !== 0
+      ? rangesOverlap(startY - beamWidth / 2, startY + beamWidth / 2, bounds.top, bounds.bottom)
+      : rangesOverlap(startX - beamWidth / 2, startX + beamWidth / 2, bounds.left, bounds.right);
+    if (!aligned) return false;
+    const distance = dir.x > 0 ? bounds.left - startX : dir.x < 0 ? startX - bounds.right : dir.y > 0 ? bounds.top - startY : startY - bounds.bottom;
+    return distance >= 0 && distance <= length;
+  };
+
   for (const target of targets) {
-    if (!target.alive || target.hp <= 0) continue;
-    const sameRow = dir.x !== 0 && Math.abs(target.y - tank.y) < 26 && Math.sign(target.x - tank.x) === dir.x;
-    const sameCol = dir.y !== 0 && Math.abs(target.x - tank.x) < 26 && Math.sign(target.y - tank.y) === dir.y;
-    if (sameRow || sameCol) {
-      target.hp -= 3;
-      state.explosions.push({ x: target.x, y: target.y, life: 0.24, size: 32, color: "255,105,105" });
-      if (target.hp <= 0) handleTankDestroyed(target, state);
+    if (!target.alive || target.hp <= 0 || !hitTank(target)) continue;
+    if (target.type === "player" && target.shieldHits > 0) {
+      target.shieldHits -= 1;
+      if (target.shieldHits === 0) {
+        target.power = null;
+        target.powerTime = 0;
+      }
+      state.explosions.push({ x: target.x, y: target.y, life: 0.22, size: 24, color: "127,180,255" });
+      continue;
     }
+    target.hp -= 2;
+    if (state.mode === "versus" && target.type === "player") {
+      state.lives[target.id] = Math.max(0, target.hp);
+    }
+    state.explosions.push({ x: target.x, y: target.y, life: 0.24, size: 32, color: "255,105,105" });
+    if (target.hp <= 0) handleTankDestroyed(target, state);
   }
 
   for (const wall of state.walls) {
-    if (wall.hp <= 0) continue;
-    const sameRow = dir.x !== 0 && Math.abs(wall.y - tank.y) < wall.h / 2 + 10 && Math.sign(wall.x - tank.x) === dir.x;
-    const sameCol = dir.y !== 0 && Math.abs(wall.x - tank.x) < wall.w / 2 + 10 && Math.sign(wall.y - tank.y) === dir.y;
-    if (sameRow || sameCol) wall.hp -= 3;
+    if (!wall.destructible || wall.hp <= 0) continue;
+    const bounds = getWallBounds(wall);
+    const aligned = dir.x !== 0
+      ? rangesOverlap(startY - beamWidth / 2, startY + beamWidth / 2, bounds.top, bounds.bottom)
+      : rangesOverlap(startX - beamWidth / 2, startX + beamWidth / 2, bounds.left, bounds.right);
+    if (!aligned) continue;
+    const distance = dir.x > 0 ? bounds.left - startX : dir.x < 0 ? startX - bounds.right : dir.y > 0 ? bounds.top - startY : startY - bounds.bottom;
+    if (distance < 0 || distance > length) continue;
+    wall.hp -= 3;
+    state.explosions.push({ x: wall.x, y: wall.y, life: 0.2, size: 26, color: "255,201,94" });
   }
 
-  state.explosions.push({ x: tank.x + dir.x * 130, y: tank.y + dir.y * 130, life: 0.16, size: 110, color: "255,105,105" });
+  state.beams.push({ x1: startX, y1: startY, x2: startX + dir.x * length, y2: startY + dir.y * length, width: beamWidth, life: 0.14, color: "255,110,94" });
 }
 
 function shoot(tank, state) {
@@ -349,27 +505,32 @@ function shoot(tank, state) {
 
   if (tank.power === "laser") {
     fireLaser(tank, state);
-    tank.cooldown = 0.16;
+    tank.cooldown = tank.type === "enemy" ? 0.5 : 0.2;
     return;
   }
 
   const dir = DIRECTIONS[tank.direction];
   const isEnemy = tank.type === "enemy";
-  const rapidFactor = tank.power === "rapid" ? 0.25 : 1;
-  const bulletSpeed = isEnemy ? 460 + state.round * 18 : state.mode === "single" ? 1120 : 920;
+  const rapidFactor = tank.power === "rapid" ? 0.45 : 1;
+  const bulletSpeed = isEnemy ? 340 + state.round * 12 : state.mode === "single" ? 980 : 900;
 
   state.bullets.push({
     x: tank.x + dir.x * 28,
     y: tank.y + dir.y * 28,
     vx: dir.x * bulletSpeed,
     vy: dir.y * bulletSpeed,
+    bounces: 1,
     radius: isEnemy ? 5 : 5.5,
     owner: tank.id,
     ownerType: tank.type,
-    color: isEnemy ? "#ffd166" : "#f8ff71"
+    color: isEnemy
+      ? "#ff8f5a"
+      : state.mode === "versus"
+        ? (tank.id === "player1" ? "#7ef28d" : "#62c7ff")
+        : "#fff06a"
   });
 
-  tank.cooldown = (isEnemy ? randomBetween(0.35, 0.7) : 0.09) * rapidFactor;
+  tank.cooldown = (isEnemy ? randomBetween(0.95, 1.45) : 0.12) * rapidFactor;
 }
 
 function updatePlayers(dt, state) {
@@ -416,33 +577,55 @@ function updateEnemies(dt, state) {
     if (enemy.aiTimer <= 0) {
       const dx = target ? target.x - enemy.x : 0;
       const dy = target ? target.y - enemy.y : 1;
-      enemy.direction = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
-      enemy.aiTimer = randomBetween(0.15, 0.45);
+      const chaseBias = Math.random() > 0.28;
+      enemy.direction = chaseBias
+        ? (Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up")
+        : ["up", "down", "left", "right"][Math.floor(Math.random() * 4)];
+      enemy.aiTimer = randomBetween(0.45, 0.95);
     }
 
     const dir = DIRECTIONS[enemy.direction];
-    moveTank(enemy, dt, state, dir.x, dir.y);
+    const moved = moveTank(enemy, dt, state, dir.x, dir.y);
+    if (!moved) enemy.aiTimer = 0;
 
     if (enemy.fireTimer <= 0) {
       shoot(enemy, state);
-      enemy.fireTimer = randomBetween(0.38, 0.82);
+      enemy.fireTimer = randomBetween(1, 1.6);
     }
   }
 }
 
-function collideBulletWithWalls(bullet, state) {
+function collideBulletWithWalls(bullet, state, prevX, prevY) {
   for (const wall of state.walls) {
-    if (wall.hp <= 0) continue;
-    if (
-      bullet.x > wall.x - wall.w / 2 &&
-      bullet.x < wall.x + wall.w / 2 &&
-      bullet.y > wall.y - wall.h / 2 &&
-      bullet.y < wall.y + wall.h / 2
-    ) {
+    if (wall.destructible && wall.hp <= 0) continue;
+    const bounds = getWallBounds(wall);
+    if (!sweepHitsRect(prevX, prevY, bullet.x, bullet.y, bounds, bullet.radius)) continue;
+
+    const hitHorizontal = Math.abs(prevX - bounds.left) < Math.abs(prevY - bounds.top)
+      ? (bullet.vx !== 0)
+      : Math.abs(bullet.vx) >= Math.abs(bullet.vy);
+
+    if (wall.destructible) {
       wall.hp -= 1;
       state.explosions.push({ x: bullet.x, y: bullet.y, life: 0.16, size: 18, color: "255,201,94" });
-      return true;
+    } else {
+      state.explosions.push({ x: bullet.x, y: bullet.y, life: 0.18, size: 16, color: "168,190,214" });
     }
+    clampExplosions(state);
+
+    if (bullet.bounces > 0) {
+      bullet.bounces -= 1;
+      if (Math.abs(bullet.vx) >= Math.abs(bullet.vy) || hitHorizontal) {
+        bullet.vx *= -1;
+        bullet.x = prevX;
+      } else {
+        bullet.vy *= -1;
+        bullet.y = prevY;
+      }
+      return "bounce";
+    }
+
+    return "destroy";
   }
   return false;
 }
@@ -466,7 +649,7 @@ function collideBulletWithBase(bullet, state) {
   return false;
 }
 
-function collideBulletWithTanks(bullet, state) {
+function collideBulletWithTanks(bullet, state, prevX, prevY) {
   const targets = bullet.ownerType === "enemy"
     ? state.players
     : state.mode === "versus"
@@ -476,10 +659,23 @@ function collideBulletWithTanks(bullet, state) {
   for (const tank of targets) {
     if (!tank.alive || tank.hp <= 0) continue;
     const bounds = tank.bounds;
-    const hit = bullet.x > bounds.left && bullet.x < bounds.right && bullet.y > bounds.top && bullet.y < bounds.bottom;
+    const hit = sweepHitsRect(prevX, prevY, bullet.x, bullet.y, bounds, bullet.radius);
     if (!hit) continue;
 
+    if (tank.type === "player" && tank.shieldHits > 0) {
+      tank.shieldHits -= 1;
+      if (tank.shieldHits === 0) {
+        tank.power = null;
+        tank.powerTime = 0;
+      }
+      state.explosions.push({ x: bullet.x, y: bullet.y, life: 0.2, size: 22, color: "127,180,255" });
+      return true;
+    }
+
     tank.hp -= 1;
+    if (state.mode === "versus" && tank.type === "player") {
+      state.lives[tank.id] = Math.max(0, tank.hp);
+    }
     state.explosions.push({ x: bullet.x, y: bullet.y, life: 0.2, size: 24, color: tank.type === "enemy" ? "255,141,99" : tank.accent });
     if (tank.hp <= 0) handleTankDestroyed(tank, state);
     return true;
@@ -487,35 +683,62 @@ function collideBulletWithTanks(bullet, state) {
   return false;
 }
 
+function collideBulletWithBounds(bullet, state, prevX, prevY) {
+  const hitLeft = bullet.x <= bullet.radius;
+  const hitRight = bullet.x >= WORLD.width - bullet.radius;
+  const hitTop = bullet.y <= bullet.radius;
+  const hitBottom = bullet.y >= WORLD.height - bullet.radius;
+
+  if (!hitLeft && !hitRight && !hitTop && !hitBottom) return false;
+
+  state.explosions.push({ x: bullet.x, y: bullet.y, life: 0.14, size: 14, color: "191,220,255" });
+  clampExplosions(state);
+
+  if (bullet.bounces > 0) {
+    bullet.bounces -= 1;
+    if (hitLeft || hitRight) {
+      bullet.vx *= -1;
+      bullet.x = clamp(prevX, bullet.radius, WORLD.width - bullet.radius);
+    }
+    if (hitTop || hitBottom) {
+      bullet.vy *= -1;
+      bullet.y = clamp(prevY, bullet.radius, WORLD.height - bullet.radius);
+    }
+    return "bounce";
+  }
+
+  return "destroy";
+}
+
 function updateBullets(dt, state) {
   for (const bullet of state.bullets) {
+    bullet.prevX = bullet.x;
+    bullet.prevY = bullet.y;
     bullet.x += bullet.vx * dt;
     bullet.y += bullet.vy * dt;
   }
 
   state.bullets = state.bullets.filter((bullet) => {
-    if (
-      bullet.x < -bullet.radius ||
-      bullet.x > WORLD.width + bullet.radius ||
-      bullet.y < -bullet.radius ||
-      bullet.y > WORLD.height + bullet.radius
-    ) {
-      return false;
-    }
-    if (collideBulletWithWalls(bullet, state)) return false;
+    const boundsResult = collideBulletWithBounds(bullet, state, bullet.prevX, bullet.prevY);
+    if (boundsResult === "destroy") return false;
+    if (boundsResult === "bounce") return true;
+    const wallResult = collideBulletWithWalls(bullet, state, bullet.prevX, bullet.prevY);
+    if (wallResult === "destroy") return false;
+    if (wallResult === "bounce") return true;
     if (collideBulletWithBase(bullet, state)) return false;
-    if (collideBulletWithTanks(bullet, state)) return false;
+    if (collideBulletWithTanks(bullet, state, bullet.prevX, bullet.prevY)) return false;
     return true;
   });
 }
 
 function spawnItem(state) {
-  const types = Object.keys(ITEM_TYPES);
+  if (state.items.length >= (state.mode === "versus" ? 3 : 2)) return;
+  const types = ["rapid", "boost", "shield", "laser", "repair", "rapid"];
   const type = types[Math.floor(Math.random() * types.length)];
   state.items.push({
     type,
     x: randomBetween(120, WORLD.width - 120),
-    y: randomBetween(120, WORLD.height - 120),
+    y: randomBetween(120, WORLD.height - 160),
     radius: 16,
     life: 9
   });
@@ -525,23 +748,32 @@ function updateItems(dt, state) {
   state.itemTimer -= dt;
   if (state.itemTimer <= 0) {
     spawnItem(state);
-    state.itemTimer = randomBetween(6, 8.5);
+    state.itemTimer = state.mode === "versus" ? randomBetween(4.6, 6.2) : randomBetween(7, 10);
   }
 
-  for (const item of state.items) {
-    item.life -= dt;
-  }
+  for (const item of state.items) item.life -= dt;
   state.items = state.items.filter((item) => item.life > 0);
 
   for (const player of state.players) {
     if (!player.alive || player.hp <= 0) continue;
     for (const item of state.items) {
       const distance = Math.hypot(player.x - item.x, player.y - item.y);
-      if (distance < 24) {
+      if (distance >= 24) continue;
+      if (ITEM_TYPES[item.type].kind === "instant") {
+        if (state.mode === "single" && state.base) {
+          state.base.hp = Math.min(state.base.maxHp, state.base.hp + 2);
+          state.score += 120;
+        } else {
+          player.hp += 1;
+          state.lives[player.id] = player.hp;
+        }
+        state.explosions.push({ x: player.x, y: player.y, life: 0.22, size: 28, color: "255,176,109" });
+      } else {
         player.power = item.type;
         player.powerTime = ITEM_TYPES[item.type].duration;
-        item.life = 0;
+        if (item.type === "shield") player.shieldHits = ITEM_TYPES[item.type].shieldHits;
       }
+      item.life = 0;
     }
   }
   state.items = state.items.filter((item) => item.life > 0);
@@ -553,22 +785,28 @@ function handleTankDestroyed(tank, state) {
 
   if (tank.type === "enemy") {
     state.score += 100;
+    if (state.mode === "single" && Math.random() < 0.18) {
+      const types = ["rapid", "boost", "shield", "laser", "repair", "shield"];
+      const type = types[Math.floor(Math.random() * types.length)];
+      state.items.push({ type, x: tank.x, y: tank.y, radius: 16, life: 10 });
+    }
+    return;
+  }
+
+  if (state.mode === "versus") {
+    state.lives[tank.id] = 0;
+    const winnerId = tank.id === "player1" ? "player2" : "player1";
+    state.wins[winnerId] += 1;
+    state.status = "ended";
+    setOverlay(`${winnerId === "player1" ? "1P" : "2P"} \u83b7\u80dc`, "\u70b9\u51fb\u5f00\u59cb\u6218\u6597\u7ee7\u7eed\u4e0b\u4e00\u56de\u5408\u3002", true);
     return;
   }
 
   state.lives[tank.id] = Math.max(0, state.lives[tank.id] - 1);
-  if (state.mode === "versus") {
-    const winnerId = tank.id === "player1" ? "player2" : "player1";
-    state.wins[winnerId] += 1;
-    state.status = "ended";
-    setOverlay(`${winnerId === "player1" ? "1P" : "2P"} 获胜`, "点击开始战斗继续下一回合。", true);
-    return;
-  }
-
   if (state.lives[tank.id] > 0) {
     state.players[0] = createPlayer(PLAYER_CONFIGS[0], "single");
   } else {
-    endGame("全军覆没", "你的坦克被打爆了，重新开始再来。");
+    endGame("\u5168\u519b\u8986\u6ca1", "\u4f60\u7684\u5766\u514b\u88ab\u6253\u7206\u4e86\uff0c\u91cd\u65b0\u5f00\u59cb\u518d\u6765\u3002");
   }
 }
 
@@ -579,6 +817,15 @@ function updateEffects(dt, state) {
     return effect.life > 0;
   });
 
+  state.beams = (state.beams || []).filter((beam) => {
+    beam.life -= dt;
+    return beam.life > 0;
+  });
+  clampExplosions(state);
+  if (state.beams.length > 8) {
+    state.beams.splice(0, state.beams.length - 8);
+  }
+
   for (const tank of [...state.players, ...state.enemies]) {
     if (!tank.alive) continue;
     tank.cooldown = Math.max(0, tank.cooldown - dt);
@@ -587,21 +834,24 @@ function updateEffects(dt, state) {
       if (tank.powerTime <= 0) {
         tank.power = null;
         tank.powerTime = 0;
+        tank.shieldHits = 0;
       }
     }
   }
 }
 
 function cleanupState(state) {
-  state.walls = state.walls.filter((wall) => wall.hp > 0);
+  state.walls = state.walls.filter((wall) => !wall.destructible || wall.hp > 0);
   state.enemies = state.enemies.filter((enemy) => enemy.alive && enemy.hp > 0);
 
   if (state.mode === "single" && state.status === "running" && state.enemies.length === 0) {
     state.round += 1;
     state.walls = createWalls("single");
-    state.base.hp = Math.min(state.base.maxHp, state.base.hp + 1);
+    state.base.hp = state.base.maxHp;
+    state.lives.player1 = 4;
+    state.players[0] = createPlayer(PLAYER_CONFIGS[0], "single");
     spawnEnemyWave(state);
-    setOverlay(`第 ${state.round} 关`, "敌军更猛了，道具也会继续掉。", true);
+    setOverlay(`\u7b2c ${state.round} \u5173`, "\u8fd9\u4e00\u5173\u654c\u519b\u4f1a\u63d0\u901f\uff0c\u4f46\u6570\u91cf\u4fdd\u6301\u5728\u66f4\u8010\u73a9\u7684\u8303\u56f4\u5185\u3002", true);
     window.setTimeout(() => {
       if (gameState && gameState.status === "running") setOverlay("", "", false);
     }, 900);
@@ -621,7 +871,7 @@ function togglePause() {
     setOverlay("", "", false);
   } else {
     gameState.status = "paused";
-    setOverlay("已暂停", "按 P 继续。", true);
+    setOverlay("\u5df2\u6682\u505c", "\u6309 P \u7ee7\u7eed\u3002", true);
   }
 }
 
@@ -629,11 +879,16 @@ function update(dt) {
   if (!gameState || gameState.status !== "running") return;
   updatePlayers(dt, gameState);
   updateEnemies(dt, gameState);
+  resolveTankOverlaps(gameState);
   updateBullets(dt, gameState);
   updateItems(dt, gameState);
   updateEffects(dt, gameState);
   cleanupState(gameState);
   syncStats();
+}
+
+function drawBackdrop() {
+  ctx.drawImage(backdropCanvas, 0, 0);
 }
 
 function drawTank(tank) {
@@ -648,11 +903,18 @@ function drawTank(tank) {
   ctx.fillStyle = "#18242b";
   ctx.fillRect(-9, -9, 18, 18);
   ctx.fillRect(0, -4, tank.width / 2 + 12, 8);
+  if (tank.type === "player" && tank.shieldHits > 0) {
+    ctx.strokeStyle = "rgba(127, 180, 255, 0.9)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 28, 0, Math.PI * 2);
+    ctx.stroke();
+  }
   if (tank.type === "player") {
     ctx.fillStyle = "rgba(6, 15, 22, 0.58)";
     ctx.fillRect(-12, 16, 24, 12);
     ctx.fillStyle = "#f4f1e7";
-    ctx.font = "bold 11px Segoe UI";
+    ctx.font = "bold 11px Bahnschrift, Segoe UI";
     ctx.textAlign = "center";
     ctx.fillText(tank.label, 0, 25);
   }
@@ -661,6 +923,15 @@ function drawTank(tank) {
 
 function drawWalls(state) {
   for (const wall of state.walls) {
+    if (wall.style === "steel") {
+      ctx.fillStyle = "#91a3b4";
+      ctx.fillRect(wall.x - wall.w / 2, wall.y - wall.h / 2, wall.w, wall.h);
+      ctx.fillStyle = "#657687";
+      ctx.fillRect(wall.x - wall.w / 2, wall.y - wall.h / 2, wall.w, 6);
+      ctx.fillRect(wall.x - wall.w / 2, wall.y + wall.h / 2 - 6, wall.w, 6);
+      continue;
+    }
+
     const ratio = wall.hp / wall.maxHp;
     ctx.fillStyle = ratio > 0.6 ? "#c69152" : ratio > 0.25 ? "#9b673d" : "#6b472f";
     ctx.fillRect(wall.x - wall.w / 2, wall.y - wall.h / 2, wall.w, wall.h);
@@ -672,7 +943,7 @@ function drawBase(state) {
   ctx.fillStyle = state.base.hp > 2 ? "#56c4ff" : "#ff8d63";
   ctx.fillRect(state.base.x - state.base.width / 2, state.base.y - state.base.height / 2, state.base.width, state.base.height);
   ctx.fillStyle = "#0d171b";
-  ctx.font = "bold 14px Segoe UI";
+  ctx.font = "bold 14px Bahnschrift, Segoe UI";
   ctx.textAlign = "center";
   ctx.fillText("BASE", state.base.x, state.base.y + 5);
 }
@@ -693,13 +964,31 @@ function drawItems(state) {
     ctx.arc(item.x, item.y, item.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "#091117";
-    ctx.font = "bold 11px Segoe UI";
+    ctx.font = "bold 11px Bahnschrift, Segoe UI";
     ctx.textAlign = "center";
-    ctx.fillText(ITEM_TYPES[item.type].label[0], item.x, item.y + 4);
+    ctx.fillText(ITEM_TYPES[item.type].short || ITEM_TYPES[item.type].label[0], item.x, item.y + 4);
   }
 }
 
 function drawExplosions(state) {
+  for (const beam of state.beams || []) {
+    const alpha = Math.max(beam.life / 0.14, 0);
+    ctx.strokeStyle = `rgba(${beam.color}, ${0.3 + alpha * 0.45})`;
+    ctx.lineWidth = beam.width + 10;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(beam.x1, beam.y1);
+    ctx.lineTo(beam.x2, beam.y2);
+    ctx.stroke();
+
+    ctx.strokeStyle = `rgba(255, 244, 214, ${0.5 + alpha * 0.35})`;
+    ctx.lineWidth = beam.width * 0.45;
+    ctx.beginPath();
+    ctx.moveTo(beam.x1, beam.y1);
+    ctx.lineTo(beam.x2, beam.y2);
+    ctx.stroke();
+  }
+
   for (const effect of state.explosions) {
     ctx.beginPath();
     ctx.fillStyle = `rgba(${effect.color}, ${Math.max(effect.life * 2.2, 0)})`;
@@ -715,11 +1004,11 @@ function drawHud(state) {
     ctx.fillStyle = "rgba(6, 15, 23, 0.62)";
     ctx.fillRect(card.x, card.y, 200, 76);
     ctx.fillStyle = player.color;
-    ctx.font = "bold 16px Segoe UI";
+    ctx.font = "bold 16px Bahnschrift, Segoe UI";
     ctx.textAlign = "left";
     ctx.fillText(`${player.label} 战况`, card.x + 12, card.y + 22);
     ctx.fillStyle = "#edf4ef";
-    ctx.font = "14px Segoe UI";
+    ctx.font = "14px Bahnschrift, Segoe UI";
     ctx.fillText(`生命: ${state.lives[player.id]}`, card.x + 12, card.y + 46);
     const weapon = player.power ? ITEM_TYPES[player.power].label : "普通炮";
     ctx.fillText(`武器: ${weapon}`, card.x + 12, card.y + 66);
@@ -728,7 +1017,7 @@ function drawHud(state) {
   ctx.fillStyle = "rgba(6, 15, 23, 0.62)";
   ctx.fillRect(WORLD.width - 220, 18, 202, 92);
   ctx.fillStyle = "#edf4ef";
-  ctx.font = "14px Segoe UI";
+  ctx.font = "14px Bahnschrift, Segoe UI";
   ctx.fillText(
     gameState.mode === "versus" ? `比分: ${state.wins.player1}:${state.wins.player2}` : `基地耐久: ${state.base.hp}/${state.base.maxHp}`,
     WORLD.width - 206,
@@ -745,6 +1034,7 @@ function drawHud(state) {
 function render() {
   ctx.clearRect(0, 0, WORLD.width, WORLD.height);
   if (!gameState) return;
+  drawBackdrop();
   drawWalls(gameState);
   drawBase(gameState);
   drawItems(gameState);
@@ -790,6 +1080,15 @@ function loop(timestamp) {
 
 document.addEventListener("keydown", (event) => {
   keys.add(event.code);
+  if (event.code === "Space" && gameState) {
+    event.preventDefault();
+    if (gameState.status === "idle" || gameState.status === "ended") {
+      resetGame();
+    } else {
+      togglePause();
+    }
+    return;
+  }
   if (event.code === "KeyP") {
     event.preventDefault();
     togglePause();
@@ -808,6 +1107,7 @@ versusModeButton.addEventListener("click", () => setMode("versus"));
 startButton.addEventListener("click", resetGame);
 
 bindTouchControls();
+buildArenaBackdrop();
 gameState = createInitialState(selectedMode);
 setMode("single");
 syncStats();

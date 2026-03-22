@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -12,7 +12,7 @@
         <div class="hero-copy">
           <p class="eyebrow">Arena Upgrade</p>
           <h1>坦克大战</h1>
-          <p class="intro">更快的子弹、更强的道具、真正的双人对战，并额外支持单人模式的移动端触控操作。</p>
+          <p class="intro">单人模式现在更耐玩：敌人更少、节奏更稳，新增钢墙、直线激光和更合理的战场道具。</p>
         </div>
 
         <section class="mode-panel">
@@ -25,46 +25,16 @@
         </section>
 
         <section class="stat-grid">
-          <div class="stat-card stat-card-highlight">
-            <span>总分 / 胜场</span>
-            <strong id="score">0</strong>
-          </div>
-          <div class="stat-card">
-            <span>关卡 / 回合</span>
-            <strong id="level">1</strong>
-          </div>
-          <div class="stat-card">
-            <span>敌军 / 状态</span>
-            <strong id="enemies">0</strong>
-          </div>
-          <div class="stat-card">
-            <span>基地耐久</span>
-            <strong id="baseHp">5</strong>
-          </div>
-          <div class="stat-card">
-            <span>1P 生命</span>
-            <strong id="p1Lives">3</strong>
-          </div>
-          <div class="stat-card">
-            <span>2P 生命</span>
-            <strong id="p2Lives">0</strong>
-          </div>
-          <div class="stat-card">
-            <span>1P 道具</span>
-            <strong id="p1Item">无</strong>
-          </div>
-          <div class="stat-card">
-            <span>1P 剩余</span>
-            <strong id="p1Timer">0s</strong>
-          </div>
-          <div class="stat-card">
-            <span>2P 道具</span>
-            <strong id="p2Item">无</strong>
-          </div>
-          <div class="stat-card">
-            <span>2P 剩余</span>
-            <strong id="p2Timer">0s</strong>
-          </div>
+          <div class="stat-card stat-card-highlight"><span>总分 / 胜场</span><strong id="score">0</strong></div>
+          <div class="stat-card"><span>关卡 / 回合</span><strong id="level">1</strong></div>
+          <div class="stat-card"><span>敌军 / 状态</span><strong id="enemies">0</strong></div>
+          <div class="stat-card"><span>基地耐久</span><strong id="baseHp">6</strong></div>
+          <div class="stat-card"><span>1P 生命</span><strong id="p1Lives">4</strong></div>
+          <div class="stat-card"><span>2P 生命</span><strong id="p2Lives">0</strong></div>
+          <div class="stat-card"><span>1P 道具</span><strong id="p1Item">-</strong></div>
+          <div class="stat-card"><span>1P 剩余</span><strong id="p1Timer">0s</strong></div>
+          <div class="stat-card"><span>2P 道具</span><strong id="p2Item">-</strong></div>
+          <div class="stat-card"><span>2P 剩余</span><strong id="p2Timer">0s</strong></div>
         </section>
 
         <section class="controls-layout">
@@ -73,7 +43,7 @@
             <ul class="controls-list">
               <li><span>W A S D</span><em>移动</em></li>
               <li><span>J</span><em>开火</em></li>
-              <li><span>触控按钮</span><em>移动端单人</em></li>
+              <li><span>屏幕按钮</span><em>移动端单人</em></li>
             </ul>
           </div>
           <div class="controls-card">
@@ -87,10 +57,12 @@
 
         <section class="tips-card">
           <p class="section-title">道具说明</p>
-          <p><strong>激光炮</strong>：瞬间扫穿整条直线，压制力最强。</p>
-          <p><strong>连发</strong>：开火间隔大幅缩短，近距离非常凶。</p>
-          <p><strong>加速</strong>：移速显著提升，更适合抢点和拉扯。</p>
-          <p><strong>生命规则</strong>：每条命只能承受一次子弹命中。</p>
+          <p><strong>激光炮</strong>：发射一整条直线光束，可穿透敌人和普通墙体，但会被钢墙挡住。</p>
+          <p><strong>速射</strong>：显著缩短开火间隔，近距离压制力很强。</p>
+          <p><strong>推进器</strong>：提升移动速度，更适合走位、绕侧和抢道具。</p>
+          <p><strong>护盾</strong>：可抵挡两次命中，适合过危险火线。</p>
+          <p><strong>维修包</strong>：单人模式修满基地耐久，双人模式额外加一条命。</p>
+          <p><strong>钢墙</strong>：不可破坏，用来卡位、防守、挡激光都很关键。</p>
         </section>
       </aside>
 
@@ -98,25 +70,26 @@
         <div class="canvas-frame">
           <div class="stage-topbar">
             <span id="modeBadge" class="mode-badge">单人闯关</span>
-            <span class="topbar-tip">抢道具，抢节奏，抢先手</span>
+            <span class="topbar-tip">抢道具，控节奏，守基地</span>
           </div>
           <canvas id="gameCanvas" width="960" height="640"></canvas>
           <div id="overlay" class="overlay">
             <div class="overlay-card">
               <h2 id="overlayTitle">准备开战</h2>
-              <p id="overlayText">单人模式打 AI，双人模式是 1P 对 2P。</p>
+              <p id="overlayText">单人模式对战 AI，双人模式是 1P 对 2P。</p>
             </div>
           </div>
-          <div id="mobileControls" class="mobile-controls hidden">
-            <div class="mobile-pad">
-              <button class="touch-button touch-up" data-touch-key="KeyW" type="button">↑</button>
-              <button class="touch-button touch-left" data-touch-key="KeyA" type="button">←</button>
-              <button class="touch-button touch-right" data-touch-key="KeyD" type="button">→</button>
-              <button class="touch-button touch-down" data-touch-key="KeyS" type="button">↓</button>
-            </div>
-            <div class="mobile-actions">
-              <button class="touch-button touch-fire" data-touch-key="KeyJ" type="button">发射</button>
-            </div>
+        </div>
+
+        <div id="mobileControls" class="mobile-controls hidden">
+          <div class="mobile-pad">
+            <button class="touch-button touch-up" data-touch-key="KeyW" type="button">↑</button>
+            <button class="touch-button touch-left" data-touch-key="KeyA" type="button">←</button>
+            <button class="touch-button touch-right" data-touch-key="KeyD" type="button">→</button>
+            <button class="touch-button touch-down" data-touch-key="KeyS" type="button">↓</button>
+          </div>
+          <div class="mobile-actions">
+            <button class="touch-button touch-fire" data-touch-key="KeyJ" type="button">发射</button>
           </div>
         </div>
       </main>
