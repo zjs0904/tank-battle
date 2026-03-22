@@ -236,7 +236,7 @@ function createInitialState(mode, carry = {}) {
     players,
     lives: { player1: mode === "versus" ? 1 : 4, player2: mode === "versus" ? 1 : 0 },
     wins: carry.wins || { player1: 0, player2: 0 },
-    itemTimer: mode === "versus" ? 3.6 : 4.8
+    itemTimer: mode === "versus" ? 4.8 : 4.8
   };
 
   if (mode === "single") spawnEnemyWave(state);
@@ -732,7 +732,7 @@ function updateBullets(dt, state) {
 }
 
 function spawnItem(state) {
-  if (state.items.length >= (state.mode === "versus" ? 3 : 2)) return;
+  if (state.items.length >= 2) return;
   const types = ["rapid", "boost", "shield", "laser", "repair", "rapid"];
   const type = types[Math.floor(Math.random() * types.length)];
   state.items.push({
@@ -748,7 +748,7 @@ function updateItems(dt, state) {
   state.itemTimer -= dt;
   if (state.itemTimer <= 0) {
     spawnItem(state);
-    state.itemTimer = state.mode === "versus" ? randomBetween(4.6, 6.2) : randomBetween(7, 10);
+    state.itemTimer = state.mode === "versus" ? randomBetween(6.2, 8.2) : randomBetween(7, 10);
   }
 
   for (const item of state.items) item.life -= dt;
