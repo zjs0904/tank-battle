@@ -46,8 +46,20 @@ const PLAYER_CONFIGS = [
     label: "1P",
     color: "#7ef28d",
     accent: "116,242,141",
-    spawnSingle: { x: WORLD.width / 2, y: WORLD.height - 92 },
-    spawnVersus: { x: 180, y: WORLD.height / 2 },
+    spawnSingle: [
+      { x: WORLD.width / 2, y: WORLD.height - 92 },
+      { x: 120, y: WORLD.height - 120 },
+      { x: WORLD.width - 120, y: WORLD.height - 120 },
+      { x: 200, y: 200 },
+      { x: WORLD.width - 200, y: 200 }
+    ],
+    spawnVersus: [
+      { x: 120, y: WORLD.height / 2 },
+      { x: 180, y: WORLD.height / 2 - 60 },
+      { x: 180, y: WORLD.height / 2 + 60 },
+      { x: 240, y: 120 },
+      { x: 240, y: WORLD.height - 120 }
+    ],
     controls: { up: "KeyW", down: "KeyS", left: "KeyA", right: "KeyD", fire: "KeyJ" }
   },
   {
@@ -55,7 +67,13 @@ const PLAYER_CONFIGS = [
     label: "2P",
     color: "#62c7ff",
     accent: "98,199,255",
-    spawnVersus: { x: WORLD.width - 180, y: WORLD.height / 2 },
+    spawnVersus: [
+      { x: WORLD.width - 120, y: WORLD.height / 2 },
+      { x: WORLD.width - 180, y: WORLD.height / 2 - 60 },
+      { x: WORLD.width - 180, y: WORLD.height / 2 + 60 },
+      { x: WORLD.width - 240, y: 120 },
+      { x: WORLD.width - 240, y: WORLD.height - 120 }
+    ],
     controls: { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight", fire: "Enter" }
   }
 ];
@@ -180,7 +198,8 @@ function clampExplosions(state) {
 }
 
 function createPlayer(config, mode) {
-  const spawn = mode === "versus" ? config.spawnVersus : config.spawnSingle;
+  const spawnPoints = mode === "versus" ? config.spawnVersus : config.spawnSingle;
+  const spawn = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
   return new Tank({
     id: config.id,
     label: config.label,
