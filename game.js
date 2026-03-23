@@ -126,7 +126,7 @@ function rangesOverlap(a1, a2, b1, b2) {
 
 function createWall(x, y, w, h, options = {}) {
   const destructible = options.destructible !== false;
-  const hp = destructible ? options.hp ?? 5 : Number.POSITIVE_INFINITY;
+  const hp = destructible ? options.hp ?? 8 : Number.POSITIVE_INFINITY;
   return {
     x,
     y,
@@ -322,7 +322,7 @@ function createVersusMapCharlie(includeSteel) {
 }
 
 function createWalls(mode) {
-  const includeSteel = Math.random() > 0.45;
+  const includeSteel = false;
   const singleMaps = [createSingleMapAlpha, createSingleMapBravo, createSingleMapCharlie];
   const versusMaps = [createVersusMapAlpha, createVersusMapBravo, createVersusMapCharlie];
   const mapFactory = (mode === "versus" ? versusMaps : singleMaps)[Math.floor(Math.random() * 3)];
