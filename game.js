@@ -37,11 +37,7 @@ const DIRECTIONS = {
   up: { x: 0, y: -1, angle: -Math.PI / 2 },
   down: { x: 0, y: 1, angle: Math.PI / 2 },
   left: { x: -1, y: 0, angle: Math.PI },
-  right: { x: 1, y: 0, angle: 0 },
-  "up-left": { x: -1, y: -1, angle: -3 * Math.PI / 4 },
-  "up-right": { x: 1, y: -1, angle: -Math.PI / 4 },
-  "down-left": { x: -1, y: 1, angle: 3 * Math.PI / 4 },
-  "down-right": { x: 1, y: 1, angle: Math.PI / 4 }
+  right: { x: 1, y: 0, angle: 0 }
 };
 
 const PLAYER_CONFIGS = [
@@ -547,15 +543,7 @@ function moveTank(tank, dt, state, intentX, intentY) {
   const velocityX = (intentX / length) * tank.speed * speedBoost * dt;
   const velocityY = (intentY / length) * tank.speed * speedBoost * dt;
 
-  if (intentX > 0 && intentY < 0) {
-    tank.direction = "up-right";
-  } else if (intentX > 0 && intentY > 0) {
-    tank.direction = "down-right";
-  } else if (intentX < 0 && intentY > 0) {
-    tank.direction = "down-left";
-  } else if (intentX < 0 && intentY < 0) {
-    tank.direction = "up-left";
-  } else if (Math.abs(intentX) > Math.abs(intentY)) {
+  if (Math.abs(intentX) > Math.abs(intentY)) {
     tank.direction = intentX > 0 ? "right" : "left";
   } else {
     tank.direction = intentY > 0 ? "down" : "up";
