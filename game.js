@@ -37,7 +37,11 @@ const DIRECTIONS = {
   up: { x: 0, y: -1, angle: -Math.PI / 2 },
   down: { x: 0, y: 1, angle: Math.PI / 2 },
   left: { x: -1, y: 0, angle: Math.PI },
-  right: { x: 1, y: 0, angle: 0 }
+  right: { x: 1, y: 0, angle: 0 },
+  "up-left": { x: -1, y: -1, angle: -3 * Math.PI / 4 },
+  "up-right": { x: 1, y: -1, angle: -Math.PI / 4 },
+  "down-left": { x: -1, y: 1, angle: 3 * Math.PI / 4 },
+  "down-right": { x: 1, y: 1, angle: Math.PI / 4 }
 };
 
 const PLAYER_CONFIGS = [
@@ -67,6 +71,9 @@ const ITEM_TYPES = {
   shield: { label: "\u62a4\u76fe", short: "\u76fe", color: "#7fb4ff", duration: 4.5, kind: "timed", shieldHits: 2 },
   repair: { label: "\u7ef4\u4fee\u5305", short: "\u4fee", color: "#ff9f63", duration: 0, kind: "instant" }
 };
+
+const PLAYER_FIRE_COOLDOWN = 0.18;
+const RAPID_FIRE_FACTOR = 0.65;
 
 class Tank {
   constructor(config) {
@@ -191,29 +198,182 @@ function createPlayer(config, mode) {
   });
 }
 
-function createWalls(mode) {
-  if (mode === "versus") {
-    return [
-      createWall(WORLD.width / 2, 120, 160, 30, { hp: 4 }),
-      createWall(WORLD.width / 2, WORLD.height - 120, 160, 30, { hp: 4 }),
-      createWall(WORLD.width / 2, WORLD.height / 2, 30, 160, { destructible: false, style: "steel" }),
-      createWall(280, WORLD.height / 2, 30, 120, { hp: 4 }),
-      createWall(WORLD.width - 280, WORLD.height / 2, 30, 120, { hp: 4 })
-    ];
+function createSingleMapAlpha(includeSteel) {
+  const walls = [
+    createWall(180, 146, 144, 30, { hp: 4 }),
+    createWall(780, 146, 144, 30, { hp: 4 }),
+    createWall(300, 270, 30, 144, { hp: 4 }),
+    createWall(660, 270, 30, 144, { hp: 4 }),
+    createWall(480, 388, 220, 30, { hp: 4 }),
+    createWall(200, 430, 150, 30, { hp: 4 }),
+    createWall(760, 430, 150, 30, { hp: 4 })
+  ];
+
+  if (includeSteel) {
+    walls.push(
+      createWall(480, 180, 180, 30, { destructible: false, style: "steel" }),
+      createWall(410, 540, 30, 86, { destructible: false, style: "steel" }),
+      createWall(550, 540, 30, 86, { destructible: false, style: "steel" })
+    );
   }
 
-  return [
-    createWall(170, 150, 132, 30, { hp: 4 }),
-    createWall(790, 150, 132, 30, { hp: 4 }),
-    createWall(300, 270, 30, 136, { hp: 4 }),
-    createWall(660, 270, 30, 136, { hp: 4 }),
-    createWall(480, 180, 180, 30, { destructible: false, style: "steel" }),
-    createWall(480, 390, 220, 30, { hp: 4 }),
-    createWall(190, 420, 140, 30, { hp: 4 }),
-    createWall(770, 420, 140, 30, { hp: 4 }),
-    createWall(410, 540, 30, 86, { destructible: false, style: "steel" }),
-    createWall(550, 540, 30, 86, { destructible: false, style: "steel" })
+  return walls;
+}
+
+function createSingleMapBravo(includeSteel) {
+  const walls = [
+    createWall(208, 190, 30, 150, { hp: 4 }),
+    createWall(752, 190, 30, 150, { hp: 4 }),
+    createWall(480, 172, 164, 30, { hp: 4 }),
+    createWall(332, 316, 144, 30, { hp: 4 }),
+    createWall(628, 316, 144, 30, { hp: 4 }),
+    createWall(480, 470, 144, 30, { hp: 4 }),
+    createWall(260, 515, 112, 30, { hp: 4 }),
+    createWall(700, 515, 112, 30, { hp: 4 })
   ];
+
+  if (includeSteel) {
+    walls.push(
+      createWall(480, 258, 30, 120, { destructible: false, style: "steel" }),
+      createWall(404, 570, 30, 72, { destructible: false, style: "steel" }),
+      createWall(556, 570, 30, 72, { destructible: false, style: "steel" })
+    );
+  }
+
+  return walls;
+}
+
+function createSingleMapCharlie(includeSteel) {
+  const walls = [
+    createWall(150, 150, 120, 30, { hp: 4 }),
+    createWall(810, 150, 120, 30, { hp: 4 }),
+    createWall(300, 210, 30, 112, { hp: 4 }),
+    createWall(660, 210, 30, 112, { hp: 4 }),
+    createWall(480, 278, 208, 30, { hp: 4 }),
+    createWall(228, 380, 180, 30, { hp: 4 }),
+    createWall(732, 380, 180, 30, { hp: 4 }),
+    createWall(480, 474, 30, 126, { hp: 4 }),
+    createWall(360, 566, 160, 30, { hp: 4 }),
+    createWall(600, 566, 160, 30, { hp: 4 })
+  ];
+
+  if (includeSteel) {
+    walls.push(
+      createWall(480, 130, 30, 82, { destructible: false, style: "steel" }),
+      createWall(420, 474, 30, 86, { destructible: false, style: "steel" }),
+      createWall(540, 474, 30, 86, { destructible: false, style: "steel" })
+    );
+  }
+
+  return walls;
+}
+
+function createVersusMapAlpha(includeSteel) {
+  const walls = [
+    createWall(WORLD.width / 2, 120, 160, 30, { hp: 4 }),
+    createWall(WORLD.width / 2, WORLD.height - 120, 160, 30, { hp: 4 }),
+    createWall(280, WORLD.height / 2, 30, 120, { hp: 4 }),
+    createWall(WORLD.width - 280, WORLD.height / 2, 30, 120, { hp: 4 })
+  ];
+
+  if (includeSteel) {
+    walls.push(createWall(WORLD.width / 2, WORLD.height / 2, 30, 160, { destructible: false, style: "steel" }));
+  }
+
+  return walls;
+}
+
+function createVersusMapBravo(includeSteel) {
+  const walls = [
+    createWall(310, 174, 150, 30, { hp: 4 }),
+    createWall(WORLD.width - 310, WORLD.height - 174, 150, 30, { hp: 4 }),
+    createWall(310, WORLD.height - 174, 30, 120, { hp: 4 }),
+    createWall(WORLD.width - 310, 174, 30, 120, { hp: 4 }),
+    createWall(WORLD.width / 2, WORLD.height / 2, 120, 30, { hp: 4 })
+  ];
+
+  if (includeSteel) {
+    walls.push(
+      createWall(WORLD.width / 2, 170, 30, 110, { destructible: false, style: "steel" }),
+      createWall(WORLD.width / 2, WORLD.height - 170, 30, 110, { destructible: false, style: "steel" })
+    );
+  }
+
+  return walls;
+}
+
+function createVersusMapCharlie(includeSteel) {
+  const walls = [
+    createWall(248, WORLD.height / 2, 160, 30, { hp: 4 }),
+    createWall(WORLD.width - 248, WORLD.height / 2, 160, 30, { hp: 4 }),
+    createWall(WORLD.width / 2, 150, 30, 120, { hp: 4 }),
+    createWall(WORLD.width / 2, WORLD.height - 150, 30, 120, { hp: 4 }),
+    createWall(WORLD.width / 2, WORLD.height / 2, 120, 30, { hp: 4 })
+  ];
+
+  if (includeSteel) {
+    walls.push(
+      createWall(390, WORLD.height / 2, 30, 120, { destructible: false, style: "steel" }),
+      createWall(WORLD.width - 390, WORLD.height / 2, 30, 120, { destructible: false, style: "steel" })
+    );
+  }
+
+  return walls;
+}
+
+function createWalls(mode) {
+  const includeSteel = Math.random() > 0.45;
+  const singleMaps = [createSingleMapAlpha, createSingleMapBravo, createSingleMapCharlie];
+  const versusMaps = [createVersusMapAlpha, createVersusMapBravo, createVersusMapCharlie];
+  const mapFactory = (mode === "versus" ? versusMaps : singleMaps)[Math.floor(Math.random() * 3)];
+  return mapFactory(includeSteel);
+}
+
+function pointBlocked(x, y, radius, state) {
+  const circleBounds = {
+    left: x - radius,
+    right: x + radius,
+    top: y - radius,
+    bottom: y + radius
+  };
+
+  for (const wall of state.walls) {
+    if (wall.destructible && wall.hp <= 0) continue;
+    if (rectsOverlap(circleBounds, getWallBounds(wall))) return true;
+  }
+
+  const baseBounds = getBaseBounds(state);
+  if (baseBounds && rectsOverlap(circleBounds, baseBounds)) return true;
+
+  for (const tank of [...state.players, ...state.enemies]) {
+    if (!tank.alive || tank.hp <= 0) continue;
+    if (rectsOverlap(circleBounds, tank.bounds)) return true;
+  }
+
+  for (const item of state.items) {
+    const distance = Math.hypot(item.x - x, item.y - y);
+    if (distance < item.radius + radius + 10) return true;
+  }
+
+  return false;
+}
+
+function findOpenPosition(state, radius, attempts = 40) {
+  for (let index = 0; index < attempts; index++) {
+    const x = randomBetween(120, WORLD.width - 120);
+    const y = randomBetween(96, WORLD.height - 150);
+    if (!pointBlocked(x, y, radius, state)) {
+      return { x, y };
+    }
+  }
+  return null;
+}
+
+function spawnStartingItems(state) {
+  const count = Math.random() > 0.45 ? 2 : 1;
+  for (let index = 0; index < count; index++) {
+    spawnItem(state, { life: 12.5 });
+  }
 }
 
 function createInitialState(mode, carry = {}) {
@@ -240,15 +400,18 @@ function createInitialState(mode, carry = {}) {
   };
 
   if (mode === "single") spawnEnemyWave(state);
+  spawnStartingItems(state);
   return state;
 }
 
 function spawnEnemyWave(state) {
-  const count = Math.min(3 + state.round, 7);
+  const stageTier = Math.floor((state.round - 1) / 5);
+  const count = Math.min(4 + state.round + stageTier, 11);
   const spawnPoints = [92, 240, 388, 536, 684, 832];
   state.enemies = Array.from({ length: count }, (_, index) => {
     const lane = spawnPoints[index % spawnPoints.length];
     const row = Math.floor(index / spawnPoints.length);
+    const isElite = index >= count - Math.min(stageTier + 1, 3);
     return new Tank({
       id: `enemy-${state.round}-${index}`,
       type: "enemy",
@@ -256,9 +419,9 @@ function spawnEnemyWave(state) {
       accent: "255,120,95",
       x: lane,
       y: 82 + row * 58,
-      speed: 96 + state.round * 10,
+      speed: 108 + state.round * 12 + stageTier * 8,
       direction: "down",
-      hp: state.round >= 5 && index === count - 1 ? 2 : 1
+      hp: isElite ? Math.min(2 + stageTier, 4) : (state.round >= 4 ? 2 : 1)
     });
   });
 }
@@ -384,7 +547,15 @@ function moveTank(tank, dt, state, intentX, intentY) {
   const velocityX = (intentX / length) * tank.speed * speedBoost * dt;
   const velocityY = (intentY / length) * tank.speed * speedBoost * dt;
 
-  if (Math.abs(intentX) > Math.abs(intentY)) {
+  if (intentX > 0 && intentY < 0) {
+    tank.direction = "up-right";
+  } else if (intentX > 0 && intentY > 0) {
+    tank.direction = "down-right";
+  } else if (intentX < 0 && intentY > 0) {
+    tank.direction = "down-left";
+  } else if (intentX < 0 && intentY < 0) {
+    tank.direction = "up-left";
+  } else if (Math.abs(intentX) > Math.abs(intentY)) {
     tank.direction = intentX > 0 ? "right" : "left";
   } else {
     tank.direction = intentY > 0 ? "down" : "up";
@@ -511,7 +682,7 @@ function shoot(tank, state) {
 
   const dir = DIRECTIONS[tank.direction];
   const isEnemy = tank.type === "enemy";
-  const rapidFactor = tank.power === "rapid" ? 0.45 : 1;
+  const rapidFactor = tank.power === "rapid" ? RAPID_FIRE_FACTOR : 1;
   const bulletSpeed = isEnemy ? 340 + state.round * 12 : state.mode === "single" ? 980 : 900;
 
   state.bullets.push({
@@ -523,6 +694,8 @@ function shoot(tank, state) {
     radius: isEnemy ? 5 : 5.5,
     owner: tank.id,
     ownerType: tank.type,
+    canHitOwner: false,
+    canOwnerBeHit: !isEnemy,
     color: isEnemy
       ? "#ff8f5a"
       : state.mode === "versus"
@@ -530,7 +703,7 @@ function shoot(tank, state) {
         : "#fff06a"
   });
 
-  tank.cooldown = (isEnemy ? randomBetween(0.95, 1.45) : 0.12) * rapidFactor;
+  tank.cooldown = (isEnemy ? randomBetween(0.95, 1.45) : PLAYER_FIRE_COOLDOWN) * rapidFactor;
 }
 
 function updatePlayers(dt, state) {
@@ -590,7 +763,11 @@ function updateEnemies(dt, state) {
 
     if (enemy.fireTimer <= 0) {
       shoot(enemy, state);
-      enemy.fireTimer = randomBetween(1, 1.6);
+      const stageTier = Math.floor((state.round - 1) / 5);
+      enemy.fireTimer = randomBetween(
+        Math.max(0.48, 0.95 - stageTier * 0.08 - state.round * 0.018),
+        Math.max(0.85, 1.45 - stageTier * 0.1 - state.round * 0.02)
+      );
     }
   }
 }
@@ -600,6 +777,14 @@ function collideBulletWithWalls(bullet, state, prevX, prevY) {
     if (wall.destructible && wall.hp <= 0) continue;
     const bounds = getWallBounds(wall);
     if (!sweepHitsRect(prevX, prevY, bullet.x, bullet.y, bounds, bullet.radius)) continue;
+
+    // 检查子弹是否贴着墙壁边缘，如果是则让它穿过
+    const overlapX = Math.max(0, Math.min(bullet.x + bullet.radius, bounds.right) - Math.max(bullet.x - bullet.radius, bounds.left));
+    const overlapY = Math.max(0, Math.min(bullet.y + bullet.radius, bounds.bottom) - Math.max(bullet.y - bullet.radius, bounds.top));
+    
+    if (overlapX <= 4 || overlapY <= 4) { // 如果重叠距离很小，认为贴着墙，让子弹穿过
+      continue;
+    }
 
     const hitHorizontal = Math.abs(prevX - bounds.left) < Math.abs(prevY - bounds.top)
       ? (bullet.vx !== 0)
@@ -615,6 +800,7 @@ function collideBulletWithWalls(bullet, state, prevX, prevY) {
 
     if (bullet.bounces > 0) {
       bullet.bounces -= 1;
+      bullet.canHitOwner = false;
       if (Math.abs(bullet.vx) >= Math.abs(bullet.vy) || hitHorizontal) {
         bullet.vx *= -1;
         bullet.x = prevX;
@@ -650,11 +836,20 @@ function collideBulletWithBase(bullet, state) {
 }
 
 function collideBulletWithTanks(bullet, state, prevX, prevY) {
-  const targets = bullet.ownerType === "enemy"
-    ? state.players
-    : state.mode === "versus"
-      ? state.players.filter((player) => player.id !== bullet.owner)
-      : state.enemies;
+  const targets = [];
+
+  if (bullet.ownerType === "enemy") {
+    targets.push(...state.players);
+  } else if (state.mode === "versus") {
+    targets.push(...state.players.filter((player) => player.id !== bullet.owner));
+  } else {
+    targets.push(...state.enemies);
+  }
+
+  if (bullet.canHitOwner) {
+    const owner = [...state.players, ...state.enemies].find((tank) => tank.id === bullet.owner);
+    if (owner) targets.push(owner);
+  }
 
   for (const tank of targets) {
     if (!tank.alive || tank.hp <= 0) continue;
@@ -696,6 +891,7 @@ function collideBulletWithBounds(bullet, state, prevX, prevY) {
 
   if (bullet.bounces > 0) {
     bullet.bounces -= 1;
+    bullet.canHitOwner = false;
     if (hitLeft || hitRight) {
       bullet.vx *= -1;
       bullet.x = clamp(prevX, bullet.radius, WORLD.width - bullet.radius);
@@ -731,16 +927,18 @@ function updateBullets(dt, state) {
   });
 }
 
-function spawnItem(state) {
+function spawnItem(state, options = {}) {
   if (state.items.length >= 2) return;
   const types = ["rapid", "boost", "shield", "laser", "repair", "rapid"];
   const type = types[Math.floor(Math.random() * types.length)];
+  const position = findOpenPosition(state, 16);
+  if (!position) return;
   state.items.push({
     type,
-    x: randomBetween(120, WORLD.width - 120),
-    y: randomBetween(120, WORLD.height - 160),
+    x: position.x,
+    y: position.y,
     radius: 16,
-    life: 9
+    life: options.life ?? 9
   });
 }
 
@@ -849,8 +1047,10 @@ function cleanupState(state) {
     state.walls = createWalls("single");
     state.base.hp = state.base.maxHp;
     state.lives.player1 = 4;
+    state.items = [];
     state.players[0] = createPlayer(PLAYER_CONFIGS[0], "single");
     spawnEnemyWave(state);
+    spawnStartingItems(state);
     setOverlay(`\u7b2c ${state.round} \u5173`, "\u8fd9\u4e00\u5173\u654c\u519b\u4f1a\u63d0\u901f\uff0c\u4f46\u6570\u91cf\u4fdd\u6301\u5728\u66f4\u8010\u73a9\u7684\u8303\u56f4\u5185\u3002", true);
     window.setTimeout(() => {
       if (gameState && gameState.status === "running") setOverlay("", "", false);
